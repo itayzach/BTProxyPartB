@@ -33,8 +33,8 @@ int main(int argc, char *argv[])
 {
 	STARTUPINFO si;
 	PROCESS_INFORMATION pi;
-	char* ExePath = "C:\\Users\\Itay\\Documents\\GitHub\\BTProxy\\src\\c\\BTClient\\BTClient.exe";
-	char* DllPath = "C:\\Users\\Itay\\Documents\\GitHub\\BTProxy\\src\\c\\Hook\\HookDll\\Debug\\HookDll.dll";
+	char* ExePath = "C:\\Users\\Itay\\Documents\\GitHub\\BTProxyPartB\\src\\c\\BTClient\\BTClient.exe";
+	char* DllPath = "C:\\Users\\Itay\\Documents\\GitHub\\BTProxyPartB\\src\\c\\Hook\\HookDll\\Debug\\HookDll.dll";
 	
 	FILE*  pLogFile;
 	time_t rawtime;

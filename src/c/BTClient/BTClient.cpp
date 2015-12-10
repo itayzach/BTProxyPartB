@@ -147,20 +147,24 @@ int NameToBthAddr(char *pszRemoteName, PSOCKADDR_BTH pRemoteBthAddr)
                 } else {
                     iResult = WSAGetLastError();
                     if ( WSA_E_NO_MORE == iResult ) { //No more data
+                      printf("[BTClient] WSA_E_NO_MORE\n");
                         //
                         // No more devices found.  Exit the lookup.
                         //
                         bContinueLookup = FALSE;
                     } else if ( WSAEFAULT == iResult ) {
+
                         //
                         // The buffer for QUERYSET was insufficient.
                         // In such case 3rd parameter "ulPQSSize" of function "WSALookupServiceNext()" receives
                         // the required size.  So we can use this parameter to reallocate memory for QUERYSET.
                         //
                         HeapFree(GetProcessHeap(), 0, pWSAQuerySet);
+
                         pWSAQuerySet = (PWSAQUERYSET) HeapAlloc(GetProcessHeap(),
                                                                 HEAP_ZERO_MEMORY,
                                                                 ulPQSSize);
+                        printf("[BTClient] Got WSAEFAULT\n");
                         if ( NULL == pWSAQuerySet ) {
                             printf("[BTClient] Unable to allocate memory for WSAQERYSET\n");
                             iResult = STATUS_NO_MEMORY;
@@ -202,7 +206,7 @@ int __cdecl main(int argc, char **argv)
     WSADATA 		wsaData;
     SOCKET 			LocalSocket 			= INVALID_SOCKET;
     SOCKADDR_BTH    SockAddrBthServer;
-    char      *RemoteBTName = "btdevice";
+    char      *RemoteBTName = "btdeviceaaa";
     char 			*sendbuf 				= "Hello from BT PC client! :)\n";
     int 			iResult;
 
