@@ -138,13 +138,15 @@ int NameToBthAddr(char *pszRemoteName, PSOCKADDR_BTH pRemoteBthAddr)
 					//
 					// Compare the name to see if this is the device we are looking for.
 					//
+					wchar_t* wcRemoteName = convertCharArrayToLPCWSTR(pszRemoteName);
 					if ((pWSAQuerySet->lpszServiceInstanceName != NULL) &&
-						(0 == wcscmp(pWSAQuerySet->lpszServiceInstanceName, convertCharArrayToLPCWSTR(pszRemoteName)))) {
+						(0 == wcscmp(pWSAQuerySet->lpszServiceInstanceName, wcRemoteName))) {
+						delete wcRemoteName;
 						//
 						// Found a remote bluetooth device with matching name.
 						// Get the address of the device and exit the lookup.
 						//
-						printf("[BTClient] Found %s!\n", pWSAQuerySet->lpszServiceInstanceName);
+						wprintf(L"[BTClient] Found %s!\n", pWSAQuerySet->lpszServiceInstanceName);
 						printf("[BTClient] lpszServiceInstanceName addr %d\n", (pWSAQuerySet->lpszServiceInstanceName));
 
 						printf("[BTClient] lpcsaBuffer address is %d\n", (pWSAQuerySet->lpcsaBuffer));
@@ -160,7 +162,7 @@ int NameToBthAddr(char *pszRemoteName, PSOCKADDR_BTH pRemoteBthAddr)
 						printf("[BTClient] Finished copy\n");
 					}
 					else {
-						printf("[BTClient] Found %s, still looking...\n", pWSAQuerySet->lpszServiceInstanceName);
+						wprintf(L"[BTClient] Found %s, still looking...\n", pWSAQuerySet->lpszServiceInstanceName);
 					}
 				}
 				else {
@@ -228,7 +230,7 @@ int __cdecl main(int argc, char **argv)
 	WSADATA 		wsaData;
 	SOCKET 			LocalSocket = INVALID_SOCKET;
 	SOCKADDR_BTH    SockAddrBthServer;
-	char      *RemoteBTName = "faked_btdevice";
+	char			*RemoteBTName = "faked_btdevice";
 	char 			*sendbuf = "Hello from BT PC client! :)\n";
 	int 			iResult;
 
@@ -269,7 +271,7 @@ int __cdecl main(int argc, char **argv)
 		WSACleanup();
 		return 1;
 	}
-	printf("[BTClient] Created local socket\n");
+	printf("[BTClient] Created local socket = %d\n", LocalSocket);
 	// =========================================
 	// Connect to server
 	// =========================================

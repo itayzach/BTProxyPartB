@@ -147,12 +147,13 @@ INT WINAPI MyWSALookupServiceNext(_In_ HANDLE hLookup, _In_ DWORD dwFlags, _Inou
 	fclose(pLogFile);
 
 	if (iResult == NO_ERROR) {
+		wchar_t* wcBTDeviceName = convertCharArrayToLPCWSTR(BTDeviceName);
 		if ((dwFlags & LUP_RETURN_NAME) && // BT app requested to look for a name
-			CXN_SUCCESS == wcscmp(pResults->lpszServiceInstanceName, convertCharArrayToLPCWSTR(BTDeviceName))) {
+			CXN_SUCCESS == wcscmp(pResults->lpszServiceInstanceName, wcBTDeviceName)) {
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 			fwprintf(pLogFile, L"[MyWSALookupServiceNext]\t Found %s, no need for TCP connection\n", BTDeviceName);
 			fclose(pLogFile);
-			delete BTDeviceName;
+			delete wcBTDeviceName;
 			return iResult;
 		}
 		else {
@@ -319,10 +320,12 @@ SOCKET WSAAPI MySocket(_In_ int af, _In_ int type, _In_ int protocol)
 
 int WINAPI MyConnect(_In_ SOCKET s, _In_ const struct sockaddr *name, _In_ int namelen)
 {
-	int iResult;
+	// if tcp is not needed, we will connect to BTSocket. 
+	// if tcp is needed, we already opened a socket in MyWSALookupServiceNext and connected to it.
+	int iResult = CXN_SUCCESS; 
 	FILE* pLogFile = NULL;
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-	fprintf(pLogFile, "[MyConnect]\t BT connect failed\n");
+	fprintf(pLogFile, "[MyConnect]\t Entered\n");
 	fclose(pLogFile);
 
 	//MsgBox("HookDll : Entered MyConnect");
@@ -410,7 +413,7 @@ int WINAPI MyClosesocket(_In_ SOCKET s)
 	int res1;
 	res1 = TCPSocketClosed ? 0 : pClosesocket(TCPSocket); // close socket only if it wasn't closed already
 	int res2;
-	res2 = pClosesocket(BTSocket);
+	res2 = tcpIsNeeded ? 0 : pClosesocket(BTSocket);
 
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 	fprintf(pLogFile, "[MyClosesocket]\t Sockets closed - %d, %d (zeros are successes)\n", res1, res2);
