@@ -130,6 +130,7 @@ int NameToBthAddr(char *pszRemoteName, PSOCKADDR_BTH pRemoteBthAddr)
 				// ZeroMemory(pWSAQuerySet, ulPQSSize);
 				// pWSAQuerySet->dwNameSpace = NS_BTH;
 				// pWSAQuerySet->dwSize = sizeof(WSAQUERYSET);
+				printf("[BTClient] Before WSALookupServiceNext\n");
 				if (NO_ERROR == WSALookupServiceNext(hLookup,
 					ulFlags,
 					&ulPQSSize,
@@ -251,6 +252,8 @@ int __cdecl main(int argc, char **argv)
 	iResult = NameToBthAddr(RemoteBTName, &SockAddrBthServer);
 	if (iResult == CXN_ERROR) {
 		printf("[BTClient] NameToBthAddr failed\n");
+		WSACleanup();
+		return 1;
 	}
 	else {
 		printf("[BTClient] %s's MAC is 0x%llX \n", RemoteBTName, SockAddrBthServer.btAddr);

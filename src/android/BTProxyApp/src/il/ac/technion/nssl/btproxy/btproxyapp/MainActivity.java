@@ -1,29 +1,31 @@
 package il.ac.technion.nssl.btproxy.btproxyapp;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.UUID;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
+import android.os.Handler;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -39,112 +41,63 @@ import android.widget.TextView;
 public class MainActivity extends Activity {
 	private Button btnRestart;
 	final Context context = this;
+	private TextView tvCmdLog;
+	private Handler updateConversationHandler;
 	// -------------------------------------------------------------------------
 	// TCP variables
 	// -------------------------------------------------------------------------
-	private TextView tvServerIP,tvServerPort;
+	private TextView tvServerIP;
 	private ServerSocket TCPServerSocket;
 	private Socket TCPClientSocket = null;
 	private final int SERVER_PORT = 4020; //Define the server port
-	private boolean receivedTCPmsg = false;
-	private String  TCPmessage = null;
-	private Runnable TCPinitiator = new Runnable() {
-		@Override
-		public void run() {
-			try {
-				android.util.Log.e("TrackingFlow", "entered TCPinitiator");
-				//Create a server socket object and bind it to a port
-				TCPServerSocket = new ServerSocket(SERVER_PORT);
-				TCPClientSocket = TCPServerSocket.accept();
-				//Get the data input stream coming from the client 
-				BufferedReader in = new BufferedReader(new InputStreamReader(TCPClientSocket.getInputStream()));
-				//Read the contents of the data buffer
-				android.util.Log.e("TrackingFlow", "before read");
-				
-				final StringBuilder sb = new StringBuilder();
-				String result = in.readLine() + System.getProperty("line.separator");
-				android.util.Log.e("TrackingFlow", "after read");
-				sb.append(result);
-				TCPmessage = result;
-				receivedTCPmsg = true;
-				// close tcp connections?
-				in.close();
-				TCPClientSocket.close();
-				//Show message on UIThread
-				runOnUiThread(new Runnable() {	
-					@Override
-					public void run() {
-						AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(context);
-						alertDialogBuilder.setTitle("Message from TCP client");
-						alertDialogBuilder.setMessage(sb.toString());
-						alertDialogBuilder.setCancelable(true);
-						alertDialogBuilder.setNeutralButton("Close", new DialogInterface.OnClickListener() {
-							public void onClick(DialogInterface dialog,int id) {
-								// if this button is clicked, just close
-								// the dialog box and do nothing
-								dialog.cancel();
-							}
-						});
-						// create alert dialog
-						AlertDialog alertDialog = alertDialogBuilder.create();
-						// show it
-						alertDialog.show();
-					}
-				});
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-		}
-	};
+	private Thread TCPserverThread = null;
+	
+	
 	// -------------------------------------------------------------------------
 	// BT variables
 	// -------------------------------------------------------------------------
 	BluetoothAdapter adapter = null;
 	private TextView tvFoundBT;
-	private static String address = "D0:C1:B1:4B:EB:23";
+	//private static String address = "D0:C1:B1:4B:EB:23";
 	private BluetoothSocket BTSocket;
-	private OutputStreamWriter os;
+	private OutputStreamWriter BTOutputStream;
 	private BluetoothDevice remoteDevice;
-	private BroadcastReceiver discoveryResult = new BroadcastReceiver() {
+	private List<BTDeviceEntry> BTDevicesList;
+	private final BroadcastReceiver discoveryResult = new BroadcastReceiver() {
 		@Override
 		public void onReceive(Context context, Intent intent) {
 			android.util.Log.e("TrackingFlow", "Entered onReceive");
-			unregisterReceiver(this);
-			//remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-			remoteDevice = adapter.getRemoteDevice(address);
-			new Thread(BTinitiator).start();
-			android.util.Log.e("TrackingFlow", "Started initiator");
+	        String action = intent.getAction();
+	        // When discovery finds a device
+	        if (BluetoothDevice.ACTION_FOUND.equals(action)) {
+	            // Get the BluetoothDevice object from the Intent
+	            BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+	            // Add the name and address to the map
+	            BTDeviceEntry btEntry = new BTDeviceEntry(device.getName(), device.getAddress());
+	            BTDevicesList.add(btEntry);
+	            updateConversationHandler.post(new updateUIThread("BTP added to BTDevicesList : " + btEntry.getName() + "[" + btEntry.getAddr() + "]"));
+	            android.util.Log.e("TrackingFlow", "Added - name = " + btEntry.getName() + " addr = " + btEntry.getAddr());
+	        }
+		    
 		}
 	};
-	private Runnable BTinitiator = new Runnable() {
-		@Override
-		public void run() {
-			try {
-				android.util.Log.e("TrackingFlow", "Found: " + remoteDevice.getName());
-				UUID uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
-				BTSocket = remoteDevice.createRfcommSocketToServiceRecord(uuid);
-				runOnUiThread(new Runnable() {	
-					@Override
-					public void run() {
-						tvFoundBT.append("\n" + "Name: " + remoteDevice.getName() + "\nAddress : " + remoteDevice.getAddress());
-					}
-				});
-				BTSocket.connect();
-				android.util.Log.e("TrackingFlow", "Connected...");
-				os = new OutputStreamWriter(BTSocket.getOutputStream());
-				android.util.Log.e("TrackingFlow", "waiting for TCP message...");
-				while (!receivedTCPmsg);
-				android.util.Log.e("TrackingFlow", "sending the following : " + TCPmessage);
-				os.write(TCPmessage);
-				os.flush();
-				android.util.Log.e("TrackingFlow", "finished sending");
-				BTSocket.close();
-				android.util.Log.e("TrackingFlow", "Closed BT socket");
-			}
-			catch (IOException e) {e.printStackTrace();}
+	
+	private void connectToBTdevice() { 
+		try {
+			android.util.Log.e("TrackingFlow", "Found: " + remoteDevice.getName());
+			UUID uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+			BTSocket = remoteDevice.createRfcommSocketToServiceRecord(uuid);
+			runOnUiThread(new Runnable() {	
+				@Override
+				public void run() {
+					tvFoundBT.append("\n" + remoteDevice.getName() + " [" + remoteDevice.getAddress() + "]");
+				}
+			});
+			BTSocket.connect();
+			android.util.Log.e("TrackingFlow", "Connected!");
 		}
-	};
-
+		catch (IOException e) {e.printStackTrace();}
+	}
 
 	
 	// -------------------------------------------------------------------------
@@ -156,58 +109,66 @@ public class MainActivity extends Activity {
 		setContentView(R.layout.activity_main);
 		
 		tvServerIP = (TextView) findViewById(R.id.textViewServerIP);
-		tvServerPort = (TextView) findViewById(R.id.textViewServerPort);
-		tvServerPort.append(" " + Integer.toString(SERVER_PORT));
 		tvFoundBT = (TextView) findViewById(R.id.textViewFoundBT);
+		tvCmdLog = (TextView) findViewById(R.id.textViewCmdLog);
 		btnRestart = (Button) findViewById(R.id.btnRestart);
+		BTDevicesList = new ArrayList<BTDeviceEntry>();
+		updateConversationHandler = new Handler();
 		final String initBTfoundText = (String) tvFoundBT.getText(); 
 		
 		btnRestart.setOnClickListener(new View.OnClickListener() {
 			@Override
-			public void onClick(View v) {
+			public void onClick(View v) { 
 				android.util.Log.e("TrackingFlow", "Restarting TCP server...");
 				tvFoundBT.setText(initBTfoundText);
+				tvCmdLog.setText("");
 				try{
 					if(BTSocket != null){
-							os.close();
+							BTOutputStream.close();
 							BTSocket.close();
 					}
 					if (TCPClientSocket != null) {
 						TCPClientSocket.close();
-						if (TCPServerSocket != null)
-							TCPServerSocket.close();
+					}
+					if (TCPServerSocket != null) {
+						TCPServerSocket.close();
 					}
 				} catch(Exception e) {
 					android.util.Log.e("TrackingFlow", "onClick exception when closing sockets: " + e.getMessage());
 				}
-				receivedTCPmsg = false;
-				new Thread(TCPinitiator).start();
+				TCPserverThread = new Thread(new TCPServerThread());
+				TCPserverThread.start();
 				
 				// BT discovery
+				unregisterReceiver(discoveryResult);
 				registerReceiver(discoveryResult, new IntentFilter(BluetoothDevice.ACTION_FOUND));
 				
 				adapter = BluetoothAdapter.getDefaultAdapter();
 				if(adapter != null && adapter.isDiscovering()) {
 					adapter.cancelDiscovery();
 				}
+				BTDevicesList.clear();
 				adapter.startDiscovery();
+
 			}
 		});
 
-		//Find IP
+		// Find IP
 		getDeviceIpAddress();
 		
-		//New thread to listen to incoming connections
-		new Thread(TCPinitiator).start();
+		// Wait for TCP connection from client
+		TCPserverThread = new Thread(new TCPServerThread());
+		android.util.Log.e("TrackingFlow", "Before start");
+		TCPserverThread.start();
 		
-		// BT discovery
+		// Start BT discovery
 		registerReceiver(discoveryResult, new IntentFilter(BluetoothDevice.ACTION_FOUND));
-		
 		adapter = BluetoothAdapter.getDefaultAdapter();
-		if(adapter != null && adapter.isDiscovering()){
+		if(adapter != null && adapter.isDiscovering()) {
 			adapter.cancelDiscovery();
 		}
 		adapter.startDiscovery();
+
 		
 	}
 	// -------------------------------------------------------------------------
@@ -223,13 +184,19 @@ public class MainActivity extends Activity {
 		}*/
 		try{
 			if(BTSocket != null){
-					os.close();
-					BTSocket.close();
+				BTOutputStream.close();
+				BTSocket.close();
 			}
 			if (TCPClientSocket != null) {
 				TCPClientSocket.close();
-				if (TCPServerSocket != null)
-					TCPServerSocket.close();
+			}
+			if (TCPServerSocket != null) {
+				TCPServerSocket.close();
+			}
+			BTDevicesList.clear();
+			adapter = BluetoothAdapter.getDefaultAdapter();
+			if(adapter != null && adapter.isDiscovering()) {
+				adapter.cancelDiscovery();
 			}
 		} catch(Exception e) {
 			android.util.Log.e("TrackingFlow", "onDestroy exception when closing sockets: " + e.getMessage());
@@ -251,7 +218,7 @@ public class MainActivity extends Activity {
 					//Filter out loopback address and other irrelevant ip addresses 
 					if (!inetAddress.isLoopbackAddress() && inetAddress.getAddress().length == 4) {
 						//Print the device ip address in to the text view 
-						tvServerIP.append(" " + inetAddress.getHostAddress());
+						tvServerIP.append(" " + inetAddress.getHostAddress() + ":" + Integer.toString(SERVER_PORT));
 					}
 				}
 			}
@@ -279,6 +246,161 @@ public class MainActivity extends Activity {
 		}
 		return super.onOptionsItemSelected(item);
 	}
-}
+	
+	class TCPServerThread implements Runnable {
+		public void run() {
+			try {
+				TCPServerSocket = new ServerSocket(SERVER_PORT);
+				android.util.Log.e("TrackingFlow", "Created TCP server");
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			//while (!Thread.currentThread().isInterrupted()) {
+				try {
+					android.util.Log.e("TrackingFlow", "Waiting for TCP connections");
+					TCPClientSocket = TCPServerSocket.accept();
+					android.util.Log.e("TrackingFlow", "Connection accepted");
+					TCPCommThread TCPcommThread = new TCPCommThread();
+					new Thread(TCPcommThread).start();
+	
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				android.util.Log.e("TrackingFlow", "TCPServerThread ended");
+			//}
+		}
+	}
+	
+	class TCPCommThread implements Runnable {
 
+		private BufferedReader TCPbufReader;
+		private int BTdevicesListIndex = 0;
+		public TCPCommThread() {
+			try {
+				this.TCPbufReader = new BufferedReader(new InputStreamReader(TCPClientSocket.getInputStream()));
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+
+		public void run() {
+			BTDeviceEntry BTdeviceEntry = null;
+			while (!Thread.currentThread().isInterrupted() && !TCPClientSocket.isClosed()) {
+				try {
+					// read TCP command
+					android.util.Log.e("TrackingFlow", "before read. BTdevicesListIndex = " + BTdevicesListIndex + " size = " + BTDevicesList.size());
+					String TCPreadLine = TCPbufReader.readLine();
+					TCPreadLine = TCPreadLine.replaceAll("\\s",""); // remove white spaces
+					android.util.Log.e("TrackingFlow", "read : " + TCPreadLine);
+					
+					if (TCPreadLine.equals("msgFromDLL_queryDevice")) {
+						android.util.Log.e("TrackingFlow", "received : msgFromDLL_queryDevice");
+						updateConversationHandler.post(new updateUIThread("DLL->BTP : queryDevice"));
+						PrintWriter TCPoutput = new PrintWriter(new BufferedWriter(
+								new OutputStreamWriter(TCPClientSocket.getOutputStream())),
+								true);
+						if (BTdevicesListIndex == BTDevicesList.size()) {
+							// meaning there are no more devices found
+							android.util.Log.e("TrackingFlow", "sending back msgFromBTProxy_WSA_E_NO_MORE");
+							TCPoutput.write("msgFromBTProxy_WSA_E_NO_MORE");
+							TCPoutput.flush();
+							updateConversationHandler.post(new updateUIThread("BTP->DLL : WSA_E_NO_MORE"));
+							continue;
+						}
+						BTdeviceEntry = BTDevicesList.get(BTdevicesListIndex);
+						android.util.Log.e("TrackingFlow", "sending back this : " + BTdeviceEntry.getName());
+						android.util.Log.e("TrackingFlow", "matching index : " + BTdevicesListIndex);
+						TCPoutput.write(BTdeviceEntry.getName());
+						TCPoutput.flush();
+						BTdevicesListIndex++;
+						updateConversationHandler.post(new updateUIThread("BTP->DLL : " + BTdeviceEntry.getName()));
+					}
+					else if (TCPreadLine.equals("msgFromDLL_connect")) {
+						android.util.Log.e("TrackingFlow", "received : msgFromDLL_connect");
+						android.util.Log.e("TrackingFlow", "MAC : " + BTdeviceEntry.getAddr());
+						updateConversationHandler.post(new updateUIThread("DLL->BTP : connect"));
+						remoteDevice = adapter.getRemoteDevice(BTdeviceEntry.getAddr());
+						android.util.Log.e("TrackingFlow", "after remoteDevice assign");
+						PrintWriter TCPoutput = new PrintWriter(new BufferedWriter(
+								new OutputStreamWriter(TCPClientSocket.getOutputStream())),
+								true);
+						android.util.Log.e("TrackingFlow", "connecting to " + BTdeviceEntry.getAddr() + "...");
+						connectToBTdevice();
+						TCPoutput.write("msgFromBTProxy_connectedTo_" + BTdeviceEntry.getAddr());
+						TCPoutput.flush();
+						updateConversationHandler.post(new updateUIThread("BTP->DLL : connected to " + BTdeviceEntry.getAddr()));
+					}
+					else if (TCPreadLine.equals("msgFromDLL_send")) {
+						updateConversationHandler.post(new updateUIThread("DLL->BTP : send"));
+						// read actual message from DLL
+						android.util.Log.e("TrackingFlow", "received : msgFromDLL_send");
+						BTOutputStream = new OutputStreamWriter(BTSocket.getOutputStream());
+						android.util.Log.e("TrackingFlow", "waiting for TCP message...");
+						TCPreadLine = TCPbufReader.readLine();
+						updateConversationHandler.post(new updateUIThread("DLL->BTP : " + TCPreadLine));
+						android.util.Log.e("TrackingFlow", "sending to BT device the following : " + TCPreadLine);
+						BTOutputStream.write(TCPreadLine + System.getProperty("line.separator"));
+						BTOutputStream.flush();
+						updateConversationHandler.post(new updateUIThread("BTP->BTD : " + TCPreadLine));
+						PrintWriter TCPoutput = new PrintWriter(new BufferedWriter(
+								new OutputStreamWriter(TCPClientSocket.getOutputStream())),
+								true);
+						TCPoutput.write("msgFromBTProxy_sentToBTdevice");
+						TCPoutput.flush();
+						updateConversationHandler.post(new updateUIThread("BTP->DLL : sentToBTdevice"));
+						android.util.Log.e("TrackingFlow", "finished sending");
+					}
+					else if (TCPreadLine.equals("msgFromDLL_closeSockets")) {
+						android.util.Log.e("TrackingFlow", "received : msgFromDLL_closeSockets");
+						updateConversationHandler.post(new updateUIThread("DLL->BTP : closeSockets"));
+						// by breaking the while loop, sockets are closed
+						break;
+					}
+					android.util.Log.e("TrackingFlow", "end of iteration");
+
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+			android.util.Log.e("TrackingFlow", "TCPCommThread was ended");
+			
+		}
+	}
+	
+	class updateUIThread implements Runnable {
+		private String msg;
+		private final StringBuilder sb = new StringBuilder();
+		
+		public updateUIThread(String result) {
+			this.msg = result;
+			sb.append(msg);
+		}
+
+		@Override
+		public void run() {
+			// add to scrollview the commands log:
+			tvCmdLog.setText(tvCmdLog.getText().toString() + msg + "\n");
+
+		}
+	}
+	
+	class BTDeviceEntry {
+		
+		private String name;
+		private String addr;
+		
+		public BTDeviceEntry(String name, String addr) {
+			this.name = new String(name);
+			this.addr = new String(addr);
+		}
+		
+		public String getName() {
+			return name;
+		}
+		
+		public String getAddr() {
+			return addr;
+		}
+	}
+}
 
