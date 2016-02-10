@@ -73,11 +73,12 @@ SOCKET BTSocket = INVALID_SOCKET;
 SOCKET TCPSocket = INVALID_SOCKET;
 struct addrinfo *result = NULL;
 bool TCPSocketClosed = false;
-char* BTProxyIpAddr = "132.68.50.98";
+char* BTProxyIpAddr = "132.68.53.86"; 
 int BTProxyPort = 4020;
 char* BTDeviceName = "btdevice"; // TODO - in BT app, the pQuerySet should be initiated with the BT device name
 bool tcpIsNeeded = false; // if true, using TCP connection
 int lastError = 0;
+bool setLastErrorToWSA_E_NO_MORE = false;
 // =============================================================================
 // Hooked functions
 // =============================================================================
@@ -101,6 +102,12 @@ int WINAPI MyWSAGetLastError() {
 	//fclose(pLogFile);
 	//return lastError;
 
+	if (setLastErrorToWSA_E_NO_MORE) {
+		// in case recv from BT Proxy for more devices was failed, 
+		// it means there are no more devices in the BT Proxy discoverable devices database
+		lastError = WSA_E_NO_MORE;
+	}
+
 	return lastError;
 }
 
@@ -108,6 +115,7 @@ INT WINAPI MyWSALookupServiceBegin(_In_ LPWSAQUERYSET pQuerySet, _In_ DWORD dwFl
 {
 	INT iResult;
 	FILE* pLogFile = NULL;
+	struct sockaddr_in server;
 
 	// Since this function initiates the query and allocates memory, it is called as is
 	iResult = pWSALookupServiceBegin(pQuerySet, dwFlags, lphLookup);
@@ -115,16 +123,54 @@ INT WINAPI MyWSALookupServiceBegin(_In_ LPWSAQUERYSET pQuerySet, _In_ DWORD dwFl
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 	fprintf(pLogFile, "[MyWSALookupServiceBegin]\t Entered\n");
 	fprintf(pLogFile, "[MyWSALookupServiceBegin]\t iResult = %d\n", iResult);
+	fclose(pLogFile);
 
-	if (dwFlags & LUP_RETURN_NAME) {
-		fprintf(pLogFile, "[MyWSALookupServiceBegin]\t device name is %s\n", pQuerySet->lpszServiceInstanceName);
-		// TODO - in BT app, the pQuerySet should be initiated with the BT device name
-		//wcscpy_s(convertCharArrayToLPCWSTR(BTDeviceName), 2, pQuerySet->lpszServiceInstanceName);
-		fprintf(pLogFile, "[MyWSALookupServiceBegin]\t Looking for this device : %s\n", BTDeviceName);
+	// initiate a TCP connection 
+	tcpIsNeeded = true;
+	TCPSocket = pSocket(AF_INET, SOCK_STREAM, 0);
+	if (TCPSocket == INVALID_SOCKET) {
+		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+		fprintf(pLogFile, "[MyWSALookupServiceNext]\t TCP socket failed with error\n");
+		fclose(pLogFile);
+		WSACleanup();
+		return -1;
 	}
 	else {
-		fprintf(pLogFile, "[MyWSALookupServiceBegin]\t BT app didn't request to look for a name\n");
+		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+		fprintf(pLogFile, "[MyWSALookupServiceNext]\t opened TCP socket number %d\n", TCPSocket);
+		fclose(pLogFile);
+
 	}
+
+	server.sin_addr.s_addr = inet_addr(BTProxyIpAddr);
+	server.sin_family = AF_INET;
+	server.sin_port = htons(BTProxyPort);
+	iResult = pConnect(TCPSocket, (struct sockaddr *)&server, sizeof(server));
+	if (iResult < 0) {
+		pClosesocket(TCPSocket);
+		TCPSocketClosed = true;
+		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+		fprintf(pLogFile, "[MyWSALookupServiceNext]\t TCP Connect failed\n");
+		fclose(pLogFile);
+		WSACleanup();
+		return -1;
+	}
+	else {
+		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+		fprintf(pLogFile, "[MyWSALookupServiceNext]\t TCP Connect succeded\n");
+		fclose(pLogFile);
+	}
+
+	// TODO - consider what to do if LUP_RETURN_NAME is not on by the BT client
+	//if (dwFlags & LUP_RETURN_NAME) {
+	//	fprintf(pLogFile, "[MyWSALookupServiceBegin]\t device name is %s\n", pQuerySet->lpszServiceInstanceName);
+	//	// TODO - in BT app, the pQuerySet should be initiated with the BT device name
+	//	//wcscpy_s(convertCharArrayToLPCWSTR(BTDeviceName), 2, pQuerySet->lpszServiceInstanceName);
+	//	fprintf(pLogFile, "[MyWSALookupServiceBegin]\t Looking for this device : %s\n", BTDeviceName);
+	//}
+	//else {
+	//	fprintf(pLogFile, "[MyWSALookupServiceBegin]\t BT app didn't request to look for a name\n");
+	//}
 
 	fclose(pLogFile);
 	return iResult;
@@ -135,131 +181,61 @@ INT WINAPI MyWSALookupServiceNext(_In_ HANDLE hLookup, _In_ DWORD dwFlags, _Inou
 	FILE* pLogFile = NULL;
 	PSOCKADDR_BTH pDummyBtAddr = NULL;
 	LPCSADDR_INFO localLpcsaBuffer = NULL;
-	struct sockaddr_in server;
+	char recvBuf[1024] = { 0 };
+	
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 	fwprintf(pLogFile, L"[MyWSALookupServiceNext]\t Entered with dwFlags = %X\n", dwFlags);
 	fclose(pLogFile);
-	iResult = pWSALookupServiceNext(hLookup, dwFlags, lpdwBufferLength, pResults);
-	lastError = pWSAGetLastError();
 
-	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-	fprintf(pLogFile, "[MyWSALookupServiceNext]\t iResult = %d, lastError = %d\n", iResult, lastError);
-	fclose(pLogFile);
+	if (tcpIsNeeded) {
+		// send a request for a device name from BT proxy
+		char *msgToBTproxy = "msgFromDLL_queryDevice\n";
+		iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
 
-	if (iResult == NO_ERROR) {
-		wchar_t* wcBTDeviceName = convertCharArrayToLPCWSTR(BTDeviceName);
-		if ((dwFlags & LUP_RETURN_NAME) && // BT app requested to look for a name
-			CXN_SUCCESS == wcscmp(pResults->lpszServiceInstanceName, wcBTDeviceName)) {
+		if (iResult) {
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-			fwprintf(pLogFile, L"[MyWSALookupServiceNext]\t Found %s, no need for TCP connection\n", BTDeviceName);
+			fprintf(pLogFile, "[MyWSALookupServiceNext]\t Sent command : %s", msgToBTproxy);
 			fclose(pLogFile);
-			delete wcBTDeviceName;
-			return iResult;
-		}
-		else {
-			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-			fwprintf(pLogFile, L"[MyWSALookupServiceNext]\t Found %s, no match... lastError = %d\n", pResults->lpszServiceInstanceName, WSAGetLastError());
-			fclose(pLogFile);
-			return iResult;
-		}
-	}
-	else {
-		if (lastError == WSA_E_NO_MORE) {
-			// Meaning no more devices were found. 
-			// We should now initiate a TCP connection and send the parameters
-			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-			fprintf(pLogFile, "[MyWSALookupServiceNext]\t iResult is WSA_E_NO_MORE (no more devices were found) initiating TCP connection\n");
-			fclose(pLogFile);
-
-			tcpIsNeeded = true;
-			TCPSocket = pSocket(AF_INET, SOCK_STREAM, 0);
-			if (TCPSocket == INVALID_SOCKET) {
+			iResult = recv(TCPSocket, recvBuf, 1024, 0);
+			if (iResult <= 0) {
 				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t TCP socket failed with error\n");
+				fprintf(pLogFile, "[MyWSALookupServiceNext]\t recv failed\n");
 				fclose(pLogFile);
-				WSACleanup();
 				return -1;
-			}
-			else {
+			} else {
 				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t opened TCP socket number %d\n", TCPSocket);
+				fprintf(pLogFile, "[MyWSALookupServiceNext]\t Received %s (%d Bytes)\n", recvBuf, iResult);
 				fclose(pLogFile);
+				if (strcmp(recvBuf, "msgFromBTProxy_WSA_E_NO_MORE") == 0) {
+					setLastErrorToWSA_E_NO_MORE = true; // will set WSA_E_NO_MORE as a return value from MyWSAGetLastError()
+					fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+					fprintf(pLogFile, "[MyWSALookupServiceNext]\t setLastErrorToWSA_E_NO_MORE\n");
+					fclose(pLogFile);
+					return -1;
+				}
+				// return a dummy structure to BT windows app:
+				// 1. in name field we should return the name we got from BT Proxy
+				// 2. set a dummy MAC address (0xAABBCCDDEEFF)
 
-			}
-
-			server.sin_addr.s_addr = inet_addr(BTProxyIpAddr);
-			server.sin_family = AF_INET;
-			server.sin_port = htons(BTProxyPort);
-			iResult = pConnect(TCPSocket, (struct sockaddr *)&server, sizeof(server));
-			if (iResult < 0) {
-				pClosesocket(TCPSocket);
-				TCPSocketClosed = true;
-				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t TCP Connect failed\n");
-				fclose(pLogFile);
-				WSACleanup();
-				return -1;
-			}
-			else {
-				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t TCP Connect succeded\n");
-				fclose(pLogFile);
-				// TODO send request for android to search for BT device using psend(...)
-
-
-
-
+				pResults->lpszServiceInstanceName = convertCharArrayToLPCWSTR(recvBuf);
 				
-				// return a dummy structure to BT windows app.
-				// in name field we should return the faked_btdevice and not the real one
-				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-				fwprintf(pLogFile, L"[MyWSALookupServiceNext]\t lpszServiceInstanceName before alloc = %d\n", (pResults->lpszServiceInstanceName));
-				pResults->lpszServiceInstanceName = convertCharArrayToLPCWSTR("faked_btdevice");
-				fwprintf(pLogFile, L"[MyWSALookupServiceNext]\t lpszServiceInstanceName after alloc = %d\n", (pResults->lpszServiceInstanceName));
-				fwprintf(pLogFile, L"[MyWSALookupServiceNext]\t Copied dummy name: %s\n", pResults->lpszServiceInstanceName);
-				fclose(pLogFile);
-
+				// allocate the dummy MAC
 				pDummyBtAddr = new SOCKADDR_BTH;
 				pDummyBtAddr->btAddr = 0xAABBCCDDEEFF;
 				pDummyBtAddr->addressFamily = AF_BTH;
 				pDummyBtAddr->port = BT_PORT_ANY;
 				pDummyBtAddr->serviceClassId = SerialPortServiceClass_UUID;
 
-				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t sa.btAddr: %012X\n", pDummyBtAddr->btAddr);
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t GET_NAP(sa.btAddr): %04X\n", GET_NAP(pDummyBtAddr->btAddr));
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t GET_SAP(sa.btAddr): %08X\n", GET_SAP(pDummyBtAddr->btAddr));
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t sa.addressFamily: %d\n", pDummyBtAddr->addressFamily);
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t sa.port: %ul\n", pDummyBtAddr->port);
-				fwprintf(pLogFile, L"[MyWSALookupServiceNext]\t lpcsaBuffer addr before alloc = %d\n", (localLpcsaBuffer));
-				fclose(pLogFile);
-
+				// allocate the localLpcsaBuffer to return to user
 				localLpcsaBuffer = new CSADDR_INFO;
-
-				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-				fwprintf(pLogFile, L"[MyWSALookupServiceNext]\t localLpcsaBuffer addr after alloc = %d\n", (localLpcsaBuffer));
-				fwprintf(pLogFile, L"[MyWSALookupServiceNext]\t lpSockaddr addr after alloc = %d\n", (localLpcsaBuffer->RemoteAddr.lpSockaddr));
 				localLpcsaBuffer->RemoteAddr.lpSockaddr = (PSOCKADDR)pDummyBtAddr;
-				fwprintf(pLogFile, L"[MyWSALookupServiceNext]\t lpSockaddr addr after alloc = %d\n", (localLpcsaBuffer->RemoteAddr.lpSockaddr));
 				localLpcsaBuffer->RemoteAddr.iSockaddrLength = sizeof(SOCKADDR_BTH);
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t localLpcsaBuffer: %d\n", localLpcsaBuffer);
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t localLpcsaBuffer->...->btAddr: %012X\n", ((PSOCKADDR_BTH)localLpcsaBuffer->RemoteAddr.lpSockaddr)->btAddr);
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t localLpcsaBuffer->...->iSockaddrLength: %d\n", localLpcsaBuffer->RemoteAddr.iSockaddrLength);
-				fclose(pLogFile);
 
+				// allocate the lpcsaBuffer to return to user
 				pResults->lpcsaBuffer = new CSADDR_INFO;
-				CopyMemory(pResults->lpcsaBuffer,localLpcsaBuffer, sizeof(*localLpcsaBuffer));
+				CopyMemory(pResults->lpcsaBuffer, localLpcsaBuffer, sizeof(*localLpcsaBuffer));
 
-				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t Copied dummy addr\n");
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t pResults->lpcsaBuffer: %d\n", pResults->lpcsaBuffer);
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t pResults->...->btAddr: %012X\n", ((PSOCKADDR_BTH)pResults->lpcsaBuffer->RemoteAddr.lpSockaddr)->btAddr);
-				fprintf(pLogFile, "[MyWSALookupServiceNext]\t pResults->...->iSockaddrLength: %d\n", pResults->lpcsaBuffer->RemoteAddr.iSockaddrLength);
-
-				fclose(pLogFile);
-				
 				return NO_ERROR;
-
 			}
 		}
 		else {
@@ -268,6 +244,15 @@ INT WINAPI MyWSALookupServiceNext(_In_ HANDLE hLookup, _In_ DWORD dwFlags, _Inou
 			fclose(pLogFile);
 			return iResult;
 		}
+	}
+	else {
+		// tcp is not needed - call pWSALookupServiceNext
+		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+		fprintf(pLogFile, "[MyWSALookupServiceNext]\t TCP is not needed \n");
+		fclose(pLogFile);
+		iResult = pWSALookupServiceNext(hLookup, dwFlags, lpdwBufferLength, pResults);
+		lastError = pWSAGetLastError();
+		return iResult;
 	}
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 	fprintf(pLogFile, "[MyWSALookupServiceNext]\t end of func \n");
@@ -289,8 +274,9 @@ SOCKET WSAAPI MySocket(_In_ int af, _In_ int type, _In_ int protocol)
 {
 	//MsgBox("HookDll : Entered MySocket");
 	FILE* pLogFile = NULL;
-	
-
+	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+	fprintf(pLogFile, "[MySocket]\t Entered\n");
+	fclose(pLogFile);
 	if (!tcpIsNeeded) {
 		BTSocket = pSocket(af, type, protocol);
 		if (BTSocket == INVALID_SOCKET) {
@@ -320,6 +306,8 @@ SOCKET WSAAPI MySocket(_In_ int af, _In_ int type, _In_ int protocol)
 
 int WINAPI MyConnect(_In_ SOCKET s, _In_ const struct sockaddr *name, _In_ int namelen)
 {
+	char recvBuf[1024] = { 0 };
+
 	// if tcp is not needed, we will connect to BTSocket. 
 	// if tcp is needed, we already opened a socket in MyWSALookupServiceNext and connected to it.
 	int iResult = CXN_SUCCESS; 
@@ -329,7 +317,23 @@ int WINAPI MyConnect(_In_ SOCKET s, _In_ const struct sockaddr *name, _In_ int n
 	fclose(pLogFile);
 
 	//MsgBox("HookDll : Entered MyConnect");
-	if (!tcpIsNeeded) {
+	if (tcpIsNeeded) {
+		// send a request for name from BT proxy
+		char *msgToBTproxy = "msgFromDLL_connect\n";
+		iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
+		if (iResult) {
+			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+			fprintf(pLogFile, "[MyConnect]\t Sent command : %s", msgToBTproxy);
+			fclose(pLogFile);
+			iResult = recv(TCPSocket, recvBuf, 1024, 0);
+			if (iResult > 0) {
+				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+				fprintf(pLogFile, "[MyConnect]\t Received %s (%d Bytes)\n", recvBuf, iResult);
+				fclose(pLogFile);
+				return 0;
+			}
+		}
+	} else {
 		iResult = pConnect(BTSocket, name, namelen);
 		if (iResult < 0) {
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
@@ -353,14 +357,46 @@ int WINAPI MySend(SOCKET s, const char* buf, int len, int flags)
 {
 	int iResult;
 	FILE* pLogFile = NULL;
+	char recvBuf[1024] = { 0 };
 	//MsgBox("HookDll : Entered MySend");
 	//char* msg = "Message from HookDLL  ";
-
+	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+	fprintf(pLogFile, "[MySend]\t Entered\n");
+	fclose(pLogFile);
 	if (tcpIsNeeded) {
-		
-		iResult = pSend(TCPSocket, buf, strlen(buf), flags);
-		// DEBUG - iResult = pSend(TCPSocket, msg, strlen(msg), flags);
-		if (iResult == SOCKET_ERROR) {
+		char *msgToBTproxy = "msgFromDLL_send\n";
+		iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
+		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+		fprintf(pLogFile, "[MySend]\t Sent command : %s", msgToBTproxy);
+		fclose(pLogFile);
+
+		if (iResult) {
+			// msgFromDLL_send was sent successfully. send actual message
+			iResult = pSend(TCPSocket, buf, strlen(buf), flags);
+			if (iResult == SOCKET_ERROR) {
+				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+				fprintf(pLogFile, "[MySend]\t TCP send failed with error %d\n", iResult);
+				fclose(pLogFile);
+
+				TCPSocketClosed = 1;
+				pClosesocket(TCPSocket);
+				WSACleanup();
+				return -1;
+			}
+			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+			fprintf(pLogFile, "[MySend]\t Sent actual message : %s\n", buf);
+			fprintf(pLogFile, "[MySend]\t Waiting before recv...\n");
+			fclose(pLogFile);
+			iResult = recv(TCPSocket, recvBuf, 1024, 0);
+			if (iResult > 0) {
+				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+				fprintf(pLogFile, "[MySend]\t Received %s (%d Bytes)\n", recvBuf, iResult);
+				fclose(pLogFile);
+				return 0;
+			}
+			// if recv failed, MySend was failed sending the actual message
+			return -1;
+		} else if (iResult == SOCKET_ERROR) {
 			//MsgBox("send failed with error: \n");
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 			fprintf(pLogFile, "[MySend]\t TCP send failed with error %d\n", iResult);
@@ -408,7 +444,16 @@ int WINAPI MyClosesocket(_In_ SOCKET s)
 	int iResult;
 	FILE* pLogFile = NULL;
 	//MsgBox("HookDll : Entered MyClosesocket");
-	
+	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+	fprintf(pLogFile, "[MyClosesocket]\t Entered\n");
+	fclose(pLogFile);
+	char *msgToBTproxy = "msgFromDLL_closeSockets\n";
+	iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
+	if (iResult) {
+		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+		fprintf(pLogFile, "[MyClosesocket]\t Sent request to BTProxy to close sockets\n");
+		fclose(pLogFile);
+	}
 
 	int res1;
 	res1 = TCPSocketClosed ? 0 : pClosesocket(TCPSocket); // close socket only if it wasn't closed already

@@ -147,12 +147,12 @@ int NameToBthAddr(char *pszRemoteName, PSOCKADDR_BTH pRemoteBthAddr)
 						// Get the address of the device and exit the lookup.
 						//
 						wprintf(L"[BTClient] Found %s!\n", pWSAQuerySet->lpszServiceInstanceName);
-						printf("[BTClient] lpszServiceInstanceName addr %d\n", (pWSAQuerySet->lpszServiceInstanceName));
+						//printf("[BTClient] lpszServiceInstanceName addr %d\n", (pWSAQuerySet->lpszServiceInstanceName));
 
-						printf("[BTClient] lpcsaBuffer address is %d\n", (pWSAQuerySet->lpcsaBuffer));
-						printf("[BTClient]\t pResults->...->btAddr: %012X\n", ((PSOCKADDR_BTH)pWSAQuerySet->lpcsaBuffer->RemoteAddr.lpSockaddr)->btAddr);
+						//printf("[BTClient] lpcsaBuffer address is %d\n", (pWSAQuerySet->lpcsaBuffer));
+						//printf("[BTClient]\t pResults->...->btAddr: %012X\n", ((PSOCKADDR_BTH)pWSAQuerySet->lpcsaBuffer->RemoteAddr.lpSockaddr)->btAddr);
 
-						printf("[BTClient] RemoteAddr address is %d\n", (pWSAQuerySet->lpcsaBuffer->RemoteAddr));
+						//printf("[BTClient] RemoteAddr address is %d\n", (pWSAQuerySet->lpcsaBuffer->RemoteAddr));
 
 						CopyMemory(pRemoteBthAddr,
 							(PSOCKADDR_BTH)pWSAQuerySet->lpcsaBuffer->RemoteAddr.lpSockaddr,
@@ -230,7 +230,8 @@ int __cdecl main(int argc, char **argv)
 	WSADATA 		wsaData;
 	SOCKET 			LocalSocket = INVALID_SOCKET;
 	SOCKADDR_BTH    SockAddrBthServer;
-	char			*RemoteBTName = "faked_btdevice";
+	//char			*RemoteBTName = "faked_btdevice";
+	char			*RemoteBTName = "btdevice";
 	char 			*sendbuf = "Hello from BT PC client! :)\n";
 	int 			iResult;
 
