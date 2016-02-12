@@ -11,6 +11,7 @@ import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
@@ -24,6 +25,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
@@ -43,6 +45,7 @@ public class MainActivity extends Activity {
 	final Context context = this;
 	private TextView tvCmdLog;
 	private Handler updateConversationHandler;
+	private Handler changeColorUIThread;
 	// -------------------------------------------------------------------------
 	// TCP variables
 	// -------------------------------------------------------------------------
@@ -50,6 +53,7 @@ public class MainActivity extends Activity {
 	private ServerSocket TCPServerSocket;
 	private Socket TCPClientSocket = null;
 	private final int SERVER_PORT = 4020; //Define the server port
+	private final String SERVER_IP = "132.68.60.117";
 	private Thread TCPserverThread = null;
 	
 	
@@ -72,13 +76,15 @@ public class MainActivity extends Activity {
 	        if (BluetoothDevice.ACTION_FOUND.equals(action)) {
 	            // Get the BluetoothDevice object from the Intent
 	            BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-	            // Add the name and address to the map
-	            BTDeviceEntry btEntry = new BTDeviceEntry(device.getName(), device.getAddress());
-	            BTDevicesList.add(btEntry);
-	            updateConversationHandler.post(new updateUIThread("BTP added to BTDevicesList : " + btEntry.getName() + "[" + btEntry.getAddr() + "]"));
-	            android.util.Log.e("TrackingFlow", "Added - name = " + btEntry.getName() + " addr = " + btEntry.getAddr());
-	        }
-		    
+	            if (!device.getAddress().equals(adapter.getAddress())) {
+	            	// Only if this device (adapter) isn't the one that's found (device),
+		            // add the name and address to the map
+		            BTDeviceEntry btEntry = new BTDeviceEntry(device.getName(), device.getAddress());
+		            BTDevicesList.add(btEntry);
+		            updateConversationHandler.post(new updateUIThread("BTP added to BTDevicesList : " + btEntry.getName() + "[" + btEntry.getAddr() + "]"));
+		            android.util.Log.e("TrackingFlow", "Added - name = " + btEntry.getName() + " addr = " + btEntry.getAddr());
+	            }
+	        }		    
 		}
 	};
 	
@@ -95,6 +101,7 @@ public class MainActivity extends Activity {
 			});
 			BTSocket.connect();
 			android.util.Log.e("TrackingFlow", "Connected!");
+			changeColorUIThread.post(new changeColorUIThread(Color.BLUE, tvFoundBT));
 		}
 		catch (IOException e) {e.printStackTrace();}
 	}
@@ -114,6 +121,7 @@ public class MainActivity extends Activity {
 		btnRestart = (Button) findViewById(R.id.btnRestart);
 		BTDevicesList = new ArrayList<BTDeviceEntry>();
 		updateConversationHandler = new Handler();
+		changeColorUIThread = new Handler();
 		final String initBTfoundText = (String) tvFoundBT.getText(); 
 		
 		btnRestart.setOnClickListener(new View.OnClickListener() {
@@ -121,6 +129,8 @@ public class MainActivity extends Activity {
 			public void onClick(View v) { 
 				android.util.Log.e("TrackingFlow", "Restarting TCP server...");
 				tvFoundBT.setText(initBTfoundText);
+				tvFoundBT.setTextColor(Color.BLACK);
+				tvServerIP.setTextColor(Color.BLACK);
 				tvCmdLog.setText("");
 				try{
 					if(BTSocket != null){
@@ -154,7 +164,8 @@ public class MainActivity extends Activity {
 		});
 
 		// Find IP
-		getDeviceIpAddress();
+		//getDeviceIpAddress();
+		getCloudIpAddress();
 		
 		// Wait for TCP connection from client
 		TCPserverThread = new Thread(new TCPServerThread());
@@ -206,7 +217,7 @@ public class MainActivity extends Activity {
 	// -------------------------------------------------------------------------
 	// getDeviceIpAddress
 	// -------------------------------------------------------------------------
-	public void getDeviceIpAddress() {
+	private void getDeviceIpAddress() {
 		try {
 			//Loop through all the network interface devices
 			for (Enumeration<NetworkInterface> enumeration = NetworkInterface
@@ -226,6 +237,15 @@ public class MainActivity extends Activity {
 			Log.e("ERROR:", e.toString());
 		}
 	}
+	// -------------------------------------------------------------------------
+	// getCloudIpAddress
+	// -------------------------------------------------------------------------
+	private void getCloudIpAddress() {
+		//inetAddr = InetAddress.getByName(<Microsoft Azure address>);
+		//tvServerIP.append(" " + inetAddr.toString());
+		tvServerIP.append(" " + SERVER_IP + ":" + SERVER_PORT);
+	}
+	
 	// -------------------------------------------------------------------------
 	// onCreateOptionsMenu
 	// -------------------------------------------------------------------------
@@ -247,7 +267,10 @@ public class MainActivity extends Activity {
 		return super.onOptionsItemSelected(item);
 	}
 	
+	// Start this thread class in order to act as a TCP *server*
+	// In this case, the BTClient (DLL) will connect to *this* device
 	class TCPServerThread implements Runnable {
+		@Override
 		public void run() {
 			try {
 				TCPServerSocket = new ServerSocket(SERVER_PORT);
@@ -255,20 +278,46 @@ public class MainActivity extends Activity {
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-			//while (!Thread.currentThread().isInterrupted()) {
-				try {
-					android.util.Log.e("TrackingFlow", "Waiting for TCP connections");
-					TCPClientSocket = TCPServerSocket.accept();
-					android.util.Log.e("TrackingFlow", "Connection accepted");
-					TCPCommThread TCPcommThread = new TCPCommThread();
-					new Thread(TCPcommThread).start();
-	
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-				android.util.Log.e("TrackingFlow", "TCPServerThread ended");
-			//}
+			try {
+				android.util.Log.e("TrackingFlow", "Waiting for TCP connections");
+				TCPClientSocket = TCPServerSocket.accept();
+				android.util.Log.e("TrackingFlow", "Connection accepted");
+				TCPCommThread TCPcommThread = new TCPCommThread();
+				new Thread(TCPcommThread).start();
+
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			android.util.Log.e("TrackingFlow", "TCPServerThread ended");
 		}
+	}
+	
+	class TCPClientThread implements Runnable {
+
+		@Override
+		public void run() {
+			InetAddress serverAddr;
+			try {
+				// connect to the cloud server IP though the TCPClientSocket
+				serverAddr = InetAddress.getByName(SERVER_IP);
+				TCPClientSocket = new Socket(serverAddr, SERVER_PORT);
+				OutputStreamWriter out = new OutputStreamWriter(TCPClientSocket.getOutputStream());
+				// send the id (btproxy)
+				out.write("btproxy");
+				out.flush();
+				android.util.Log.e("TrackingFlow", "sent btproxy as id to TCP server");
+				// change the TextView color to identify the valid conenction
+				changeColorUIThread.post(new changeColorUIThread(Color.BLUE, tvServerIP));
+				// run the comm thread for the DLL<->BTP messages pipe
+				TCPCommThread TCPcommThread = new TCPCommThread();
+				new Thread(TCPcommThread).start();
+			} catch (UnknownHostException e) {
+				e.printStackTrace();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+
 	}
 	
 	class TCPCommThread implements Runnable {
@@ -283,6 +332,7 @@ public class MainActivity extends Activity {
 			}
 		}
 
+		@Override
 		public void run() {
 			BTDeviceEntry BTdeviceEntry = null;
 			while (!Thread.currentThread().isInterrupted() && !TCPClientSocket.isClosed()) {
@@ -329,6 +379,7 @@ public class MainActivity extends Activity {
 						TCPoutput.write("msgFromBTProxy_connectedTo_" + BTdeviceEntry.getAddr());
 						TCPoutput.flush();
 						updateConversationHandler.post(new updateUIThread("BTP->DLL : connected to " + BTdeviceEntry.getAddr()));
+						changeColorUIThread.post(new changeColorUIThread(Color.BLUE, tvServerIP));
 					}
 					else if (TCPreadLine.equals("msgFromDLL_send")) {
 						updateConversationHandler.post(new updateUIThread("DLL->BTP : send"));
@@ -381,6 +432,21 @@ public class MainActivity extends Activity {
 			// add to scrollview the commands log:
 			tvCmdLog.setText(tvCmdLog.getText().toString() + msg + "\n");
 
+		}
+	}
+	
+	class changeColorUIThread implements Runnable {
+		private int color;
+		private TextView tv;
+		
+		public changeColorUIThread(int color, TextView tv) {
+			this.color = color;
+			this.tv = tv;
+		}
+
+		@Override
+		public void run() {
+			tv.setTextColor(color);
 		}
 	}
 	

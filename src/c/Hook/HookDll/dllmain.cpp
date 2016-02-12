@@ -68,7 +68,7 @@ SOCKET BTSocket = INVALID_SOCKET;
 SOCKET TCPSocket = INVALID_SOCKET;
 struct addrinfo *result = NULL;
 bool TCPSocketClosed = false;
-char* BTProxyIpAddr = "132.68.53.86"; 
+char* BTProxyIpAddr = "132.68.50.55"; 
 int BTProxyPort = 4020;
 char* BTDeviceName = "btdevice"; // TODO - in BT app, the pQuerySet should be initiated with the BT device name
 bool tcpIsNeeded = false; // if true, using TCP connection
@@ -128,14 +128,14 @@ INT WINAPI MyWSALookupServiceBegin(_In_ LPWSAQUERYSET pQuerySet, _In_ DWORD dwFl
 		TCPSocket = pSocket(AF_INET, SOCK_STREAM, 0);
 		if (TCPSocket == INVALID_SOCKET) {
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-			fprintf(pLogFile, "[MyWSALookupServiceNext]\t TCP socket failed with error\n");
+			fprintf(pLogFile, "[MyWSALookupServiceBegin]\t TCP socket failed with error\n");
 			fclose(pLogFile);
 			WSACleanup();
 			return -1;
 		}
 		else {
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-			fprintf(pLogFile, "[MyWSALookupServiceNext]\t opened TCP socket number %d\n", TCPSocket);
+			fprintf(pLogFile, "[MyWSALookupServiceBegin]\t opened TCP socket number %d\n", TCPSocket);
 			fclose(pLogFile);
 
 		}
@@ -150,7 +150,7 @@ INT WINAPI MyWSALookupServiceBegin(_In_ LPWSAQUERYSET pQuerySet, _In_ DWORD dwFl
 			pClosesocket(TCPSocket);
 			TCPSocketClosed = true;
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-			fprintf(pLogFile, "[MyWSALookupServiceNext]\t TCP Connect failed\n");
+			fprintf(pLogFile, "[MyWSALookupServiceBegin]\t TCP Connect failed\n");
 			fclose(pLogFile);
 
 			// return the pWSALookupServiceBegin result
@@ -158,8 +158,25 @@ INT WINAPI MyWSALookupServiceBegin(_In_ LPWSAQUERYSET pQuerySet, _In_ DWORD dwFl
 		}
 		else {
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-			fprintf(pLogFile, "[MyWSALookupServiceNext]\t TCP Connect succeded\n");
+			fprintf(pLogFile, "[MyWSALookupServiceBegin]\t TCP Connect succeded\n");
 			fclose(pLogFile);
+			
+			// send the id to cloud server
+			const char* id = "windspc";
+			connectRes = pSend(TCPSocket, id, strlen(id), 0);
+
+			if (connectRes == SOCKET_ERROR) {
+				//MsgBox("send failed with error: \n");
+				fprintf(pLogFile, "[MyWSALookupServiceBegin]\t TCP send of the id failed with error %d\n", connectRes);
+				TCPSocketClosed = 1;
+				pClosesocket(TCPSocket);
+				WSACleanup();
+				return -1;
+			}
+			else {
+				//MsgBox("send succeded");
+				fprintf(pLogFile, "[MyWSALookupServiceBegin]\t TCP send of the id succeeded. id = %s, connectRes =  %d\n", id, connectRes);
+			}
 		}
 	}
 	return iResult;
