@@ -233,7 +233,7 @@ int __cdecl main(int argc, char **argv)
 	SOCKADDR_BTH    SockAddrBthServer;
 	//char			*RemoteBTName = "faked_btdevice";
 	char			*RemoteBTName = "btdevice";
-	char 			*sendbuf = "Hello from BT PC client! :)\n";
+	char 			*sendbuf = "Hello from DLL\n";
 	int 			iResult;
 
 	// =========================================

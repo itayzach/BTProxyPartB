@@ -2,7 +2,9 @@ package il.ac.technion.nssl.btproxy.btproxyapp;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
@@ -52,9 +54,10 @@ public class MainActivity extends Activity {
 	private TextView tvServerIP;
 	private ServerSocket TCPServerSocket;
 	private Socket TCPClientSocket = null;
-	private final int SERVER_PORT = 4020; //Define the server port
-	private final String SERVER_IP = "132.68.60.117";
-	private Thread TCPserverThread = null;
+	private final int CLOUD_SERVER_PORT = 4020; //Define the server port
+	private final String CLOUD_SERVER_IP = "132.68.60.117";
+	//private Thread TCPserverThread = null;
+	private Thread TCPclientThread = null;
 	
 	
 	// -------------------------------------------------------------------------
@@ -146,8 +149,10 @@ public class MainActivity extends Activity {
 				} catch(Exception e) {
 					android.util.Log.e("TrackingFlow", "onClick exception when closing sockets: " + e.getMessage());
 				}
-				TCPserverThread = new Thread(new TCPServerThread());
-				TCPserverThread.start();
+				//TCPserverThread = new Thread(new TCPServerThread());
+				//TCPserverThread.start();
+				TCPclientThread = new Thread(new TCPClientThread());
+				TCPclientThread.start();
 				
 				// BT discovery
 				unregisterReceiver(discoveryResult);
@@ -168,9 +173,13 @@ public class MainActivity extends Activity {
 		getCloudIpAddress();
 		
 		// Wait for TCP connection from client
-		TCPserverThread = new Thread(new TCPServerThread());
-		android.util.Log.e("TrackingFlow", "Before start");
-		TCPserverThread.start();
+		// TCPserverThread = new Thread(new TCPServerThread());
+		// android.util.Log.e("TrackingFlow", "Before start");
+		// TCPserverThread.start();
+		
+		// Connect to cloud server
+		TCPclientThread = new Thread(new TCPClientThread());
+		TCPclientThread.start();
 		
 		// Start BT discovery
 		registerReceiver(discoveryResult, new IntentFilter(BluetoothDevice.ACTION_FOUND));
@@ -229,7 +238,7 @@ public class MainActivity extends Activity {
 					//Filter out loopback address and other irrelevant ip addresses 
 					if (!inetAddress.isLoopbackAddress() && inetAddress.getAddress().length == 4) {
 						//Print the device ip address in to the text view 
-						tvServerIP.append(" " + inetAddress.getHostAddress() + ":" + Integer.toString(SERVER_PORT));
+						tvServerIP.append(" " + inetAddress.getHostAddress() + ":" + Integer.toString(CLOUD_SERVER_PORT));
 					}
 				}
 			}
@@ -243,7 +252,7 @@ public class MainActivity extends Activity {
 	private void getCloudIpAddress() {
 		//inetAddr = InetAddress.getByName(<Microsoft Azure address>);
 		//tvServerIP.append(" " + inetAddr.toString());
-		tvServerIP.append(" " + SERVER_IP + ":" + SERVER_PORT);
+		tvServerIP.append(" " + CLOUD_SERVER_IP + ":" + CLOUD_SERVER_PORT);
 	}
 	
 	// -------------------------------------------------------------------------
@@ -273,7 +282,7 @@ public class MainActivity extends Activity {
 		@Override
 		public void run() {
 			try {
-				TCPServerSocket = new ServerSocket(SERVER_PORT);
+				TCPServerSocket = new ServerSocket(CLOUD_SERVER_PORT);
 				android.util.Log.e("TrackingFlow", "Created TCP server");
 			} catch (IOException e) {
 				e.printStackTrace();
@@ -299,8 +308,8 @@ public class MainActivity extends Activity {
 			InetAddress serverAddr;
 			try {
 				// connect to the cloud server IP though the TCPClientSocket
-				serverAddr = InetAddress.getByName(SERVER_IP);
-				TCPClientSocket = new Socket(serverAddr, SERVER_PORT);
+				serverAddr = InetAddress.getByName(CLOUD_SERVER_IP);
+				TCPClientSocket = new Socket(serverAddr, CLOUD_SERVER_PORT);
 				OutputStreamWriter out = new OutputStreamWriter(TCPClientSocket.getOutputStream());
 				// send the id (btproxy)
 				out.write("btproxy");
@@ -338,9 +347,19 @@ public class MainActivity extends Activity {
 			while (!Thread.currentThread().isInterrupted() && !TCPClientSocket.isClosed()) {
 				try {
 					// read TCP command
+					String TCPreadLine = "";
+					byte[] TCPbyteBuf = new byte[1024];
+					ByteArrayOutputStream byteArrayOutputStream = 
+			                  new ByteArrayOutputStream(1024);
+					int TCPbytesRead = 0;
+					InputStream TCPinputStream = TCPClientSocket.getInputStream();
 					android.util.Log.e("TrackingFlow", "before read. BTdevicesListIndex = " + BTdevicesListIndex + " size = " + BTDevicesList.size());
-					String TCPreadLine = TCPbufReader.readLine();
-					TCPreadLine = TCPreadLine.replaceAll("\\s",""); // remove white spaces
+					//String TCPreadLine = TCPbufReader.readLine();
+					TCPbytesRead = TCPinputStream.read(TCPbyteBuf);
+					android.util.Log.e("TrackingFlow", "read " + TCPbytesRead);
+					byteArrayOutputStream.write(TCPbyteBuf, 0, TCPbytesRead);
+					TCPreadLine += byteArrayOutputStream.toString("UTF-8");
+					//TCPreadLine = TCPreadLine.replaceAll("\\s",""); // remove white spaces
 					android.util.Log.e("TrackingFlow", "read : " + TCPreadLine);
 					
 					if (TCPreadLine.equals("msgFromDLL_queryDevice")) {

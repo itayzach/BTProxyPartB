@@ -16,6 +16,11 @@
 
 // TODO
 // 1. BTProxyApp crashed if BTClient doesn't try to connect (in case nameToBTaddr fails)
+//	Also crashes if the cloud server closes the sockets.
+// 2. In BTProxyApp, the commands are using read, but the actual message uses readLine. change it to read
+// 3. Add to CloudServer inifinite loop for accept connections (so it will stay alive forever)
+//		Do that by creating a different thead for each connection (inside this thread, two threads of commChannel should be opened)
+
 
 // =============================================================================
 // Define hooking pointers
@@ -68,6 +73,7 @@ SOCKET BTSocket = INVALID_SOCKET;
 SOCKET TCPSocket = INVALID_SOCKET;
 struct addrinfo *result = NULL;
 bool TCPSocketClosed = false;
+char* CloudServerAddr = "132.68.60.117";
 char* BTProxyIpAddr = "132.68.50.55"; 
 int BTProxyPort = 4020;
 char* BTDeviceName = "btdevice"; // TODO - in BT app, the pQuerySet should be initiated with the BT device name
@@ -140,7 +146,8 @@ INT WINAPI MyWSALookupServiceBegin(_In_ LPWSAQUERYSET pQuerySet, _In_ DWORD dwFl
 
 		}
 
-		server.sin_addr.s_addr = inet_addr(BTProxyIpAddr);
+		//server.sin_addr.s_addr = inet_addr(BTProxyIpAddr);
+		server.sin_addr.s_addr = inet_addr(CloudServerAddr);
 		server.sin_family = AF_INET;
 		server.sin_port = htons(BTProxyPort);
 		connectRes = pConnect(TCPSocket, (struct sockaddr *)&server, sizeof(server));
@@ -195,7 +202,7 @@ INT WINAPI MyWSALookupServiceNext(_In_ HANDLE hLookup, _In_ DWORD dwFlags, _Inou
 
 	if (tcpIsNeeded) {
 		// send a request for a device name from BT proxy
-		char *msgToBTproxy = "msgFromDLL_queryDevice\n";
+		char *msgToBTproxy = "msgFromDLL_queryDevice";
 		iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
 
 		if (iResult) {
@@ -325,7 +332,7 @@ int WINAPI MyConnect(_In_ SOCKET s, _In_ const struct sockaddr *name, _In_ int n
 	//MsgBox("HookDll : Entered MyConnect");
 	if (tcpIsNeeded) {
 		// send a request for name from BT proxy
-		char *msgToBTproxy = "msgFromDLL_connect\n";
+		char *msgToBTproxy = "msgFromDLL_connect";
 		iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
 		if (iResult) {
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
@@ -370,7 +377,7 @@ int WINAPI MySend(SOCKET s, const char* buf, int len, int flags)
 	fprintf(pLogFile, "[MySend]\t Entered\n");
 	fclose(pLogFile);
 	if (tcpIsNeeded) {
-		char *msgToBTproxy = "msgFromDLL_send\n";
+		char *msgToBTproxy = "msgFromDLL_send";
 		iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
 		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 		fprintf(pLogFile, "[MySend]\t Sent command : %s", msgToBTproxy);
@@ -453,7 +460,7 @@ int WINAPI MyClosesocket(_In_ SOCKET s)
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 	fprintf(pLogFile, "[MyClosesocket]\t Entered\n");
 	fclose(pLogFile);
-	char *msgToBTproxy = "msgFromDLL_closeSockets\n";
+	char *msgToBTproxy = "msgFromDLL_closeSockets";
 	iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
 	if (iResult) {
 		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
