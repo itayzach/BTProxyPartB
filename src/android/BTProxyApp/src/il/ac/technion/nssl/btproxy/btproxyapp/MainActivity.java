@@ -9,13 +9,10 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.InetAddress;
-import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,7 +27,6 @@ import android.content.IntentFilter;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
-import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -66,10 +62,11 @@ public class MainActivity extends Activity {
 	BluetoothAdapter adapter = null;
 	private TextView tvFoundBT;
 	//private static String address = "D0:C1:B1:4B:EB:23";
-	private BluetoothSocket BTSocket;
+	private BluetoothSocket BTSocket = null;
 	private OutputStreamWriter BTOutputStream;
 	private BluetoothDevice remoteDevice;
 	private List<BTDeviceEntry> BTDevicesList;
+	private boolean startedDiscovery = false;
 	private final BroadcastReceiver discoveryResult = new BroadcastReceiver() {
 		@Override
 		public void onReceive(Context context, Intent intent) {
@@ -79,15 +76,14 @@ public class MainActivity extends Activity {
 	        if (BluetoothDevice.ACTION_FOUND.equals(action)) {
 	            // Get the BluetoothDevice object from the Intent
 	            BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-	            if (!device.getAddress().equals(adapter.getAddress())) {
-	            	// Only if this device (adapter) isn't the one that's found (device),
-		            // add the name and address to the map
-		            BTDeviceEntry btEntry = new BTDeviceEntry(device.getName(), device.getAddress());
-		            BTDevicesList.add(btEntry);
-		            updateConversationHandler.post(new updateUIThread("BTP added to BTDevicesList : " + btEntry.getName() + "[" + btEntry.getAddr() + "]"));
-		            android.util.Log.e("TrackingFlow", "Added - name = " + btEntry.getName() + " addr = " + btEntry.getAddr());
-	            }
-	        }		    
+	            // add the name and address to the map
+	            BTDeviceEntry btEntry = new BTDeviceEntry(device.getName(), device.getAddress());
+	            BTDevicesList.add(btEntry);
+	            updateConversationHandler.post(new updateUIThread("BTP added to BTDevicesList : " + btEntry.getName() + "[" + btEntry.getAddr() + "]"));
+	            android.util.Log.e("TrackingFlow", "Added - name = " + btEntry.getName() + " addr = " + btEntry.getAddr());
+	            
+	        }
+	        startedDiscovery = true;
 		}
 	};
 	
@@ -103,7 +99,6 @@ public class MainActivity extends Activity {
 				}
 			});
 			BTSocket.connect();
-			android.util.Log.e("TrackingFlow", "Connected!");
 			changeColorUIThread.post(new changeColorUIThread(Color.BLUE, tvFoundBT));
 		}
 		catch (IOException e) {e.printStackTrace();}
@@ -137,8 +132,8 @@ public class MainActivity extends Activity {
 				tvCmdLog.setText("");
 				try{
 					if(BTSocket != null){
-							BTOutputStream.close();
-							BTSocket.close();
+						BTOutputStream.close();
+						BTSocket.close();
 					}
 					if (TCPClientSocket != null) {
 						TCPClientSocket.close();
@@ -155,15 +150,16 @@ public class MainActivity extends Activity {
 				TCPclientThread.start();
 				
 				// BT discovery
-				unregisterReceiver(discoveryResult);
-				registerReceiver(discoveryResult, new IntentFilter(BluetoothDevice.ACTION_FOUND));
-				
-				adapter = BluetoothAdapter.getDefaultAdapter();
+//				unregisterReceiver(discoveryResult);
+//				registerReceiver(discoveryResult, new IntentFilter(BluetoothDevice.ACTION_FOUND));
+//				
+//				adapter = BluetoothAdapter.getDefaultAdapter();
 				if(adapter != null && adapter.isDiscovering()) {
 					adapter.cancelDiscovery();
 				}
 				BTDevicesList.clear();
-				adapter.startDiscovery();
+				startedDiscovery = false;
+				//adapter.startDiscovery();
 
 			}
 		});
@@ -184,10 +180,10 @@ public class MainActivity extends Activity {
 		// Start BT discovery
 		registerReceiver(discoveryResult, new IntentFilter(BluetoothDevice.ACTION_FOUND));
 		adapter = BluetoothAdapter.getDefaultAdapter();
-		if(adapter != null && adapter.isDiscovering()) {
-			adapter.cancelDiscovery();
-		}
-		adapter.startDiscovery();
+//		if(adapter != null && adapter.isDiscovering()) {
+//			adapter.cancelDiscovery();
+//		}
+//		adapter.startDiscovery();
 
 		
 	}
@@ -214,8 +210,8 @@ public class MainActivity extends Activity {
 				TCPServerSocket.close();
 			}
 			BTDevicesList.clear();
-			adapter = BluetoothAdapter.getDefaultAdapter();
 			if(adapter != null && adapter.isDiscovering()) {
+				unregisterReceiver(discoveryResult);
 				adapter.cancelDiscovery();
 			}
 		} catch(Exception e) {
@@ -223,29 +219,6 @@ public class MainActivity extends Activity {
 		}
 	}
 
-	// -------------------------------------------------------------------------
-	// getDeviceIpAddress
-	// -------------------------------------------------------------------------
-	private void getDeviceIpAddress() {
-		try {
-			//Loop through all the network interface devices
-			for (Enumeration<NetworkInterface> enumeration = NetworkInterface
-					.getNetworkInterfaces(); enumeration.hasMoreElements();) {
-				NetworkInterface networkInterface = enumeration.nextElement();
-				//Loop through all the ip addresses of the network interface devices
-				for (Enumeration<InetAddress> enumerationIpAddr = networkInterface.getInetAddresses(); enumerationIpAddr.hasMoreElements();) {
-					InetAddress inetAddress = enumerationIpAddr.nextElement();
-					//Filter out loopback address and other irrelevant ip addresses 
-					if (!inetAddress.isLoopbackAddress() && inetAddress.getAddress().length == 4) {
-						//Print the device ip address in to the text view 
-						tvServerIP.append(" " + inetAddress.getHostAddress() + ":" + Integer.toString(CLOUD_SERVER_PORT));
-					}
-				}
-			}
-		} catch (SocketException e) {
-			Log.e("ERROR:", e.toString());
-		}
-	}
 	// -------------------------------------------------------------------------
 	// getCloudIpAddress
 	// -------------------------------------------------------------------------
@@ -357,6 +330,10 @@ public class MainActivity extends Activity {
 					//String TCPreadLine = TCPbufReader.readLine();
 					TCPbytesRead = TCPinputStream.read(TCPbyteBuf);
 					android.util.Log.e("TrackingFlow", "read " + TCPbytesRead);
+					if (TCPbytesRead < 0) {
+						updateConversationHandler.post(new updateUIThread("DLL->BTP : Read 0 bytes"));
+						break;
+					}
 					byteArrayOutputStream.write(TCPbyteBuf, 0, TCPbytesRead);
 					TCPreadLine += byteArrayOutputStream.toString("UTF-8");
 					//TCPreadLine = TCPreadLine.replaceAll("\\s",""); // remove white spaces
@@ -368,7 +345,17 @@ public class MainActivity extends Activity {
 						PrintWriter TCPoutput = new PrintWriter(new BufferedWriter(
 								new OutputStreamWriter(TCPClientSocket.getOutputStream())),
 								true);
-						if (BTdevicesListIndex == BTDevicesList.size()) {
+						if (BTdevicesListIndex == 0) {
+							// Start BT discovery
+							if(adapter.isDiscovering()) {
+								android.util.Log.e("TrackingFlow", "cancaling discovery");
+								adapter.cancelDiscovery();
+							}
+							adapter.startDiscovery();
+							android.util.Log.e("TrackingFlow", "started discovery");
+							while(!startedDiscovery);
+							android.util.Log.e("TrackingFlow", "finished discovery");
+						} else if (BTdevicesListIndex == BTDevicesList.size()) {
 							// meaning there are no more devices found
 							android.util.Log.e("TrackingFlow", "sending back msgFromBTProxy_WSA_E_NO_MORE");
 							TCPoutput.write("msgFromBTProxy_WSA_E_NO_MORE");
@@ -394,7 +381,13 @@ public class MainActivity extends Activity {
 								new OutputStreamWriter(TCPClientSocket.getOutputStream())),
 								true);
 						android.util.Log.e("TrackingFlow", "connecting to " + BTdeviceEntry.getAddr() + "...");
-						connectToBTdevice();
+						if (BTSocket == null) {
+							connectToBTdevice();
+							android.util.Log.e("TrackingFlow", "Connected to BT device");
+						} else if (!BTSocket.isConnected()) {
+							connectToBTdevice();
+							android.util.Log.e("TrackingFlow", "Connected to BT device");
+						}
 						TCPoutput.write("msgFromBTProxy_connectedTo_" + BTdeviceEntry.getAddr());
 						TCPoutput.flush();
 						updateConversationHandler.post(new updateUIThread("BTP->DLL : connected to " + BTdeviceEntry.getAddr()));
@@ -422,9 +415,12 @@ public class MainActivity extends Activity {
 					}
 					else if (TCPreadLine.equals("msgFromDLL_closeSockets")) {
 						android.util.Log.e("TrackingFlow", "received : msgFromDLL_closeSockets");
+						if (BTSocket != null) {
+							changeColorUIThread.post(new changeColorUIThread(Color.BLACK, tvFoundBT));
+							BTOutputStream.close();
+							BTSocket.close();
+						}
 						updateConversationHandler.post(new updateUIThread("DLL->BTP : closeSockets"));
-						// by breaking the while loop, sockets are closed
-						break;
 					}
 					android.util.Log.e("TrackingFlow", "end of iteration");
 

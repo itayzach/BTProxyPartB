@@ -15,10 +15,9 @@
 #pragma comment(lib,"ws2_32.lib")
 
 // TODO
-// 1. BTProxyApp crashed if BTClient doesn't try to connect (in case nameToBTaddr fails)
-//	Also crashes if the cloud server closes the sockets.
-// 2. In BTProxyApp, the commands are using read, but the actual message uses readLine. change it to read
-// 3. Add to CloudServer inifinite loop for accept connections (so it will stay alive forever)
+// 1. Try showing on BT device two messages one after the other (Hooking wrapper running and finishes successfully, and then running again)
+// 2. Look for TODO in CloudServer.cpp - need to open a new thread for each accept, instead of opening both threads only after HKW & BTP are connected
+// 3. (probably the same as TODO #2) Add to CloudServer inifinite loop for accept connections (so it will stay alive forever)
 //		Do that by creating a different thead for each connection (inside this thread, two threads of commChannel should be opened)
 
 
@@ -460,12 +459,19 @@ int WINAPI MyClosesocket(_In_ SOCKET s)
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 	fprintf(pLogFile, "[MyClosesocket]\t Entered\n");
 	fclose(pLogFile);
-	char *msgToBTproxy = "msgFromDLL_closeSockets";
-	iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
-	if (iResult) {
-		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-		fprintf(pLogFile, "[MyClosesocket]\t Sent request to BTProxy to close sockets\n");
-		fclose(pLogFile);
+	if (!TCPSocketClosed) {
+		if (TCPSocket != INVALID_SOCKET) {
+			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+			fprintf(pLogFile, "[MyClosesocket]\t TCPSocket is alive\n");
+			fclose(pLogFile);
+			char *msgToBTproxy = "msgFromDLL_closeSockets";
+			iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
+			if (iResult) {
+				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+				fprintf(pLogFile, "[MyClosesocket]\t Sent request to BTProxy to close sockets\n");
+				fclose(pLogFile);
+			}
+		}
 	}
 
 	int res1;
@@ -493,9 +499,9 @@ extern "C" __declspec(dllexport) void dummy(void){
 BOOL WINAPI DllMain(HINSTANCE hinst, DWORD dwReason, LPVOID reserved)
 {
 	FILE* pLogFile = NULL;
-	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-	fprintf(pLogFile, "[DllMain]\t Entered with dwReason = %d\n", dwReason);
-	fclose(pLogFile);
+	//fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+	//fprintf(pLogFile, "[DllMain]\t Entered with dwReason = %d\n", dwReason);
+	//fclose(pLogFile);
 
 	if (DetourIsHelperProcess()) {
 		return TRUE;
@@ -529,9 +535,9 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD dwReason, LPVOID reserved)
 		DetourTransactionCommit();
 	}
 
-	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-	fprintf(pLogFile, "[DllMain]\t Done\n");
-	fclose(pLogFile);
+	//fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+	//fprintf(pLogFile, "[DllMain]\t Done\n");
+	//fclose(pLogFile);
 	return TRUE;
 }
 

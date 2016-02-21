@@ -6,7 +6,7 @@
     <string name="btFoundDevice">Connected to BT server : </string>
     <string name="action_settings">Settings</string>
     <string name="clientMsg"></string>
-    <string name="restartServer">Restart TCP server</string>
+    <string name="restartServer">Reconnect to CS</string>
     <string name="close">Close</string>
     <string name="cmdLog"></string>
 

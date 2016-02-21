@@ -1,5 +1,5 @@
-#define CXN_MAX_INQUIRY_RETRY             3
-#define CXN_DELAY_NEXT_INQUIRY            15
+#define CXN_MAX_INQUIRY_RETRY             2
+#define CXN_DELAY_NEXT_INQUIRY            5
 #define CXN_SUCCESS                       0
 #define CXN_ERROR                         1
 
