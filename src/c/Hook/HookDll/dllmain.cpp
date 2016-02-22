@@ -206,7 +206,7 @@ INT WINAPI MyWSALookupServiceNext(_In_ HANDLE hLookup, _In_ DWORD dwFlags, _Inou
 
 		if (iResult) {
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-			fprintf(pLogFile, "[MyWSALookupServiceNext]\t Sent command : %s", msgToBTproxy);
+			fprintf(pLogFile, "[MyWSALookupServiceNext]\t Sent command : %s\n", msgToBTproxy);
 			fclose(pLogFile);
 			iResult = recv(TCPSocket, recvBuf, 1024, 0);
 			if (iResult <= 0) {
@@ -218,6 +218,17 @@ INT WINAPI MyWSALookupServiceNext(_In_ HANDLE hLookup, _In_ DWORD dwFlags, _Inou
 				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 				fprintf(pLogFile, "[MyWSALookupServiceNext]\t Received %s (%d Bytes)\n", recvBuf, iResult);
 				fclose(pLogFile);
+				if (strcmp(recvBuf, "msgFromServer_sendToDstFailed") == 0) {
+					// meaning, btproxy isn't connected yet. Try to look locally
+					tcpIsNeeded = false;
+					fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+					fprintf(pLogFile, "[MyWSALookupServiceNext]\t recevied msgFromServer_sendToDstFailed, trying to look locally \n");
+					fclose(pLogFile);
+					iResult = pWSALookupServiceNext(hLookup, dwFlags, lpdwBufferLength, pResults);
+					lastError = pWSAGetLastError();
+					return iResult;
+
+				}
 				if (strcmp(recvBuf, "msgFromBTProxy_WSA_E_NO_MORE") == 0) {
 					setLastErrorToWSA_E_NO_MORE = true; // will set WSA_E_NO_MORE as a return value from MyWSAGetLastError()
 					fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");

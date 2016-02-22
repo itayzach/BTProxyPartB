@@ -353,8 +353,8 @@ public class MainActivity extends Activity {
 							}
 							adapter.startDiscovery();
 							android.util.Log.e("TrackingFlow", "started discovery");
-							while(!startedDiscovery);
-							android.util.Log.e("TrackingFlow", "finished discovery");
+							//while(!startedDiscovery);
+							//android.util.Log.e("TrackingFlow", "finished discovery");
 						} else if (BTdevicesListIndex == BTDevicesList.size()) {
 							// meaning there are no more devices found
 							android.util.Log.e("TrackingFlow", "sending back msgFromBTProxy_WSA_E_NO_MORE");
@@ -363,6 +363,8 @@ public class MainActivity extends Activity {
 							updateConversationHandler.post(new updateUIThread("BTP->DLL : WSA_E_NO_MORE"));
 							continue;
 						}
+						while(BTDevicesList.size() == 0);
+						android.util.Log.e("TrackingFlow", "A device was added");
 						BTdeviceEntry = BTDevicesList.get(BTdevicesListIndex);
 						android.util.Log.e("TrackingFlow", "sending back this : " + BTdeviceEntry.getName());
 						android.util.Log.e("TrackingFlow", "matching index : " + BTdevicesListIndex);
@@ -421,6 +423,13 @@ public class MainActivity extends Activity {
 							BTSocket.close();
 						}
 						updateConversationHandler.post(new updateUIThread("DLL->BTP : closeSockets"));
+						BTDevicesList.clear();
+						BTdevicesListIndex = 0;
+						if(adapter != null && adapter.isDiscovering()) {
+							adapter.cancelDiscovery();
+						}
+						updateConversationHandler.post(new updateUIThread("BTP cleared devices list"));
+						
 					}
 					android.util.Log.e("TrackingFlow", "end of iteration");
 
