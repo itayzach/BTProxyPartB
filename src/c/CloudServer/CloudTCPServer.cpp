@@ -53,34 +53,34 @@ DWORD WINAPI CommChannel( LPVOID lpParam ) {
 			//WSACleanup();
 			return 1;
 		}
+		if (strcmp(msgFromSrc, "msgFromDLL_closeSockets") == 0 ) {
+			if (pSockets->ID == WINDSPC) {
+				printf("[%s (%d->%d)] Closing WINDSPC socket\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
+				closesocket(pSockets->SrcSocket);
+				printf("[%s (%d->%d)] Not breaking...\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
+				printf("[%s (%d->%d)] Sending message %s to dst...\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, msgFromSrc);
+				send( pSockets->DstSocket, msgFromSrc, strlen(msgFromSrc), 0 );
+				break;
+			}
+			printf("[%s (%d->%d)] received msgFromDLL_closeSockets, but not exiting loop\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
+			//break;
+		}
 		// send data from src to dst socket
 		printf("[%s (%d->%d)] Sending message %s to dst...\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, msgFromSrc);
 		iSendResult = send( pSockets->DstSocket, msgFromSrc, strlen(msgFromSrc), 0 );
 		if (iSendResult == SOCKET_ERROR) {
 			printf("[%s (%d->%d)] send to dst failed with error: %d\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, WSAGetLastError());
-			//closesocket(pSockets->SrcSocket);
-			closesocket(pSockets->DstSocket);
-			WSACleanup();
-			return 1;
-			
-			// TODO: add this to notify the Src that Dst is not connected yet:
-			//iSendResult = send( pSockets->SrcSocket, "msgFromServer_sendToDstFailed", strlen(msgFromSrc), 0 );
-			//if (iSendResult == SOCKET_ERROR) {
-			//	closesocket(pSockets->SrcSocket);
-			//	WSACleanup();
-			//	return 1;	
-			//}
-			//continue;
-		}
-		//printf("[%s (%d->%d)] Bytes sent to dst: %d\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, iSendResult);
-		if (strcmp(msgFromSrc, "msgFromDLL_closeSockets") == 0 ) {
-			if (pSockets->ID == WINDSPC) {
-				printf("[%s (%d->%d)] received msgFromDLL_closeSockets, closing WINDSPC socket\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
+			// Notify the Src that Dst is not connected yet:
+			char* msgFromServer = "msgFromServer_sendToDstFailed";
+			iSendResult = send( pSockets->SrcSocket, msgFromServer, strlen(msgFromServer), 0 );
+
+			if (iSendResult == SOCKET_ERROR) {
 				closesocket(pSockets->SrcSocket);
-				break;
+				WSACleanup();
+				return 1;	
 			}
-			printf("[%s (%d->%d)] received msgFromDLL_closeSockets, but not exiting loop\n");
-			//break;
+			printf("[%s (%d->%d)] sent to SRC 'msgFromServer_sendToDstFailed'\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);			
+			continue;
 		}
 	}
 	printf("[%s (%d->%d)] Thread finished\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
@@ -104,6 +104,11 @@ int main(int argc , char *argv[])
     char recvid[DEFAULT_MSGLEN] = "";
 	
     int recvidlen = DEFAULT_IDLEN;
+	
+	// Two threads for communcation between sockets
+	pSocketsStruct pCommThreadData[COMM_THREADS_NUM];
+	DWORD          dwCommThreadId[COMM_THREADS_NUM];
+	HANDLE         hCommThread[COMM_THREADS_NUM] = { NULL };
 	
 	// Initialize Winsock
 	iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
@@ -162,7 +167,7 @@ int main(int argc , char *argv[])
 		PCClientSocket = INVALID_SOCKET;
 		BTProxyClientSocket = INVALID_SOCKET;
 		// Create sockets for pc and btproxy
-		while (PCClientSocket == INVALID_SOCKET || BTProxyClientSocket == INVALID_SOCKET) {
+		//while (PCClientSocket == INVALID_SOCKET || BTProxyClientSocket == INVALID_SOCKET) {
 			// Since we don't know which of the btproxy or the pc will connect first,
 			// we keep in TempClientSocket the new client socket, and after we receive the id ("windspc" or "btproxy")
 			// we will save at PCClientSocket the pc socket and at BTProxyClientSocket the btproxy socket.
@@ -188,24 +193,89 @@ int main(int argc , char *argv[])
 					if (PCClientSocket == INVALID_SOCKET) {
 						PCClientSocket = TempClientSocket;
 						printf("Creating thread for windspc\n");
+						// Create thread for WINDSPC
+						pCommThreadData[WINDSPC] = (pSocketsStruct) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+							sizeof(SocketsStruct));
+						if (pCommThreadData[WINDSPC] == NULL) {
+							printf("Cannot allocate data for thread %d\n", WINDSPC);
+							closesocket(PCClientSocket);
+							WSACleanup();
+							return 1;
+						}
+						pCommThreadData[WINDSPC]->SrcSocket = PCClientSocket;
+						if (hCommThread[BTPROXY] != NULL) {
+							pCommThreadData[WINDSPC]->DstSocket = pCommThreadData[BTPROXY]->SrcSocket;
+							pCommThreadData[BTPROXY]->DstSocket = pCommThreadData[WINDSPC]->SrcSocket;
+						} else {
+							pCommThreadData[WINDSPC]->DstSocket = INVALID_SOCKET;
+						}
+						pCommThreadData[WINDSPC]->ID = WINDSPC;
 						
+						hCommThread[WINDSPC] = CreateThread( 
+							NULL,                         // default security attributes
+							0,                            // use default stack size  
+							CommChannel,           	      // thread function name
+							pCommThreadData[WINDSPC],     // argument to thread function 
+							0,                            // use default creation flags 
+							&dwCommThreadId[WINDSPC]);    // returns the thread identifier 
 						
-						
-						
+						// Check the return value for success.
+						// If CreateThread fails, terminate execution. 
+						// This will automatically clean up threads and memory. 
+						if (hCommThread[WINDSPC] == NULL) 
+						{
+							printf("Cannot create thread %d\n", WINDSPC);
+							closesocket(PCClientSocket);
+							WSACleanup();
+							return 1;
+						}
 					}
 				} else if (strcmp(recvid,"btproxy") == 0) {
+					printf("Recieved btproxy\n");
 					if (BTProxyClientSocket == INVALID_SOCKET) {
 						BTProxyClientSocket = TempClientSocket;
 						printf("Creating thread for btproxy\n");
+					    // Create thread for BTPROXY
+						pCommThreadData[BTPROXY] = (pSocketsStruct) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+							sizeof(SocketsStruct));
+						if (pCommThreadData[BTPROXY] == NULL) {
+							printf("Cannot allocate data for thread %d\n", BTPROXY);
+							closesocket(PCClientSocket);
+							WSACleanup();
+							return 1;
+						}
+						printf("pCommThreadData[BTPROXY] = %d\n", pCommThreadData[BTPROXY]);
+						pCommThreadData[BTPROXY]->SrcSocket = BTProxyClientSocket;
+						if (hCommThread[WINDSPC] != NULL) {
+							pCommThreadData[BTPROXY]->DstSocket = pCommThreadData[WINDSPC]->SrcSocket;
+							pCommThreadData[WINDSPC]->DstSocket = pCommThreadData[BTPROXY]->SrcSocket;
+						} else {
+							pCommThreadData[BTPROXY]->DstSocket = INVALID_SOCKET;
+						}
+						pCommThreadData[BTPROXY]->ID = BTPROXY;
 						
-						
-						
-						
+						hCommThread[BTPROXY] = CreateThread( 
+							NULL,                         // default security attributes
+							0,                            // use default stack size  
+							CommChannel,           	      // thread function name
+							pCommThreadData[BTPROXY],     // argument to thread function 
+							0,                            // use default creation flags 
+							&dwCommThreadId[BTPROXY]);    // returns the thread identifier 
+						// Check the return value for success.
+						// If CreateThread fails, terminate execution. 
+						// This will automatically clean up threads and memory. 
+						if (hCommThread[BTPROXY] == NULL) 
+						{
+							printf("Cannot create thread %d\n", BTPROXY);
+							closesocket(PCClientSocket);
+							WSACleanup();
+							return 1;
+						}
 					}
-					printf("Recieved btproxy\n");
 				} else {
 					printf("received %s which is not a correct id\n", recvid);
 				}
+				
 			}
 			else if (iResult == 0) {
 				printf("Connection closing...\n");
@@ -215,69 +285,24 @@ int main(int argc , char *argv[])
 				WSACleanup();
 				return 1;
 			}
+		//}
+		if (PCClientSocket != INVALID_SOCKET && BTProxyClientSocket != INVALID_SOCKET) {
+			printf("Both sides are connected\n");		
 		}
-		printf("Both sides are connected\n");
-		// create two threads for communcation between sockets
-		pSocketsStruct pCommThreadData[COMM_THREADS_NUM];
-		DWORD          dwCommThreadId[COMM_THREADS_NUM];
-		HANDLE         hCommThread[COMM_THREADS_NUM];
-		
-		for (int i = 0; i < COMM_THREADS_NUM; i++) {
-			pCommThreadData[i] = (pSocketsStruct) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
-					sizeof(SocketsStruct));
-			if (pCommThreadData[i] == NULL) {
-				printf("Cannot allocate data for thread %d\n", i);
-				closesocket(PCClientSocket);
-				closesocket(BTProxyClientSocket);
-				WSACleanup();
-				return 1;
-			}
-			if (i == 0) {
-				// DLL->BTP
-				pCommThreadData[i]->SrcSocket = PCClientSocket;
-				pCommThreadData[i]->DstSocket = BTProxyClientSocket;
-				pCommThreadData[i]->ID = WINDSPC;
-			} else {
-				// BTP->DLL
-				pCommThreadData[i]->SrcSocket = BTProxyClientSocket;
-				pCommThreadData[i]->DstSocket = PCClientSocket;
-				pCommThreadData[i]->ID = BTPROXY;
-			}
-			
-			hCommThread[i] = CreateThread( 
-				NULL,                   // default security attributes
-				0,                      // use default stack size  
-				CommChannel,            // thread function name
-				pCommThreadData[i],     // argument to thread function 
-				0,                      // use default creation flags 
-				&dwCommThreadId[i]);    // returns the thread identifier 
+	}
+	printf("Waiting for both threads to finish\n");
+	WaitForMultipleObjects(COMM_THREADS_NUM, hCommThread, TRUE, INFINITE);
+	printf("Both threads are done\n");
 
-
-			// Check the return value for success.
-			// If CreateThread fails, terminate execution. 
-			// This will automatically clean up threads and memory. 
-
-			if (hCommThread[i] == NULL) 
-			{
-				printf("Cannot create thread %d\n", i);
-				closesocket(PCClientSocket);
-				closesocket(BTProxyClientSocket);
-				WSACleanup();
-				return 1;
-			}				
-		}
-		WaitForMultipleObjects(COMM_THREADS_NUM, hCommThread, TRUE, INFINITE);
-
-		
-		// Close all thread handles and free memory allocations.
-		for(int i=0; i<COMM_THREADS_NUM; i++)
+	
+	// Close all thread handles and free memory allocations.
+	for(int i=0; i<COMM_THREADS_NUM; i++)
+	{
+		CloseHandle(hCommThread[i]);
+		if(pCommThreadData[i] != NULL)
 		{
-			CloseHandle(hCommThread[i]);
-			if(pCommThreadData[i] != NULL)
-			{
-				HeapFree(GetProcessHeap(), 0, pCommThreadData[i]);
-				pCommThreadData[i] = NULL;    // Ensure address is not reused.
-			}
+			HeapFree(GetProcessHeap(), 0, pCommThreadData[i]);
+			pCommThreadData[i] = NULL;    // Ensure address is not reused.
 		}
 	}
     // No longer need server socket

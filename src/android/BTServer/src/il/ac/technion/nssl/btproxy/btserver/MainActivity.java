@@ -99,46 +99,40 @@ public class MainActivity extends Activity {
 				serverSocket = adapter.listenUsingRfcommWithServiceRecord("BLTServer", uuid);
 				android.util.Log.e("TrackingFlow", "Listening...");
 				socket = serverSocket.accept();
-				android.util.Log.e("TrackingFlow", "Socket accepted...");
+				android.util.Log.e("TrackingFlow", "Socket accepted...");				
 				BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-				while (true) {
-					final StringBuilder sb = new StringBuilder();
-					android.util.Log.e("TrackingFlow", "before read");
-					String result = in.readLine() + System.getProperty("line.separator");
-					if (result.length() <= 0) {
-						break;
+				final StringBuilder sb = new StringBuilder();
+				String result = in.readLine() + System.getProperty("line.separator");
+				android.util.Log.e("TrackingFlow", "after read");
+				sb.append(result);
+				
+				//Show message on UIThread
+				runOnUiThread(new Runnable() {	
+					@Override
+					public void run() {
+						AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(context);
+						alertDialogBuilder.setTitle("Message from BT client");
+						alertDialogBuilder.setMessage(sb.toString());
+						alertDialogBuilder.setCancelable(true);
+						alertDialogBuilder.setNeutralButton("Close", new DialogInterface.OnClickListener() {
+							public void onClick(DialogInterface dialog,int id) {
+								// if this button is clicked, just close
+								// the dialog box and do nothing
+								dialog.cancel();
+							}
+						});
+						// create alert dialog
+						AlertDialog alertDialog = alertDialogBuilder.create();
+						// show it
+						alertDialog.show();
 					}
-					android.util.Log.e("TrackingFlow", "after read");
-					sb.append(result);
-					
-					//Show message on UIThread
-					runOnUiThread(new Runnable() {	
-						@Override
-						public void run() {
-							AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(context);
-							alertDialogBuilder.setTitle("Message from BT client");
-							alertDialogBuilder.setMessage(sb.toString());
-							alertDialogBuilder.setCancelable(true);
-							alertDialogBuilder.setNeutralButton("Close", new DialogInterface.OnClickListener() {
-								public void onClick(DialogInterface dialog,int id) {
-									// if this button is clicked, just close
-									// the dialog box and do nothing
-									dialog.cancel();
-								}
-							});
-							// create alert dialog
-							AlertDialog alertDialog = alertDialogBuilder.create();
-							// show it
-							alertDialog.show();
-						}
-					});
-				}
+				});
+				
 				in.close();
 				socket.close();
 				android.util.Log.e("TrackingFlow", "closed socket");
 			} catch (IOException e) {
 				android.util.Log.e("TrackingFlow", "got IOException : " + e.getMessage());
-				new Thread(reader).start();
 			}
 		}
 	};
