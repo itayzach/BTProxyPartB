@@ -28,48 +28,48 @@ DWORD WINAPI CommChannel( LPVOID lpParam ) {
 	int iResult, iSendResult;
 	// Convert to the correct data type
 	pSocketsStruct pSockets = (pSocketsStruct)lpParam;
-	//printf("[%s (%d->%d)] Thread created\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
+	//printf("[%s (%d->%d)] Thread created\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
 	msgFromSrc = (char*)malloc(DEFAULT_MSGLEN);
 	while (true) {
 		// recv message from pc socket
 		if (msgFromSrc == NULL) {
-			printf("[%s (%d->%d)] can't allocate msgFromSrc string\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
+			printf("[%s (%d->%d)] can't allocate msgFromSrc string\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
 			closesocket(pSockets->SrcSocket);
 			closesocket(pSockets->DstSocket);
 			WSACleanup();
 			return 1;
 		}
 		
-		printf("[%s (%d->%d)] Waiting for message from src...\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
+		printf("[%s (%d->%d)] Waiting for message from src...\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
 		iResult = recv(pSockets->SrcSocket, msgFromSrc, recvmsglen, 0);
 		if (iResult > 0) {
-			//printf("[%s (%d->%d)] Bytes received from src: %d\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, iResult);
+			//printf("[%s (%d->%d)] Bytes received from src: %d\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, iResult);
 			msgFromSrc[iResult] = '\0';
-			printf("[%s (%d->%d)] Received %s from src\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, msgFromSrc);
+			printf("[%s (%d->%d)] Received %s from src\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, msgFromSrc);
 		} else {
-			printf("[%s (%d->%d)] recv from src failed with error: %d\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, WSAGetLastError());
+			printf("[%s (%d->%d)] recv from src failed with error: %d\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, WSAGetLastError());
 			closesocket(pSockets->SrcSocket);
 			//closesocket(pSockets->DstSocket);
 			//WSACleanup();
 			return 1;
 		}
-		if (strcmp(msgFromSrc, "msgFromDLL_closeSockets") == 0 ) {
+		if (strcmp(msgFromSrc, "msgFromHKW_closeSockets") == 0 ) {
 			if (pSockets->ID == WINDSPC) {
-				printf("[%s (%d->%d)] Closing WINDSPC socket\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
+				printf("[%s (%d->%d)] Closing WINDSPC socket\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
 				closesocket(pSockets->SrcSocket);
-				printf("[%s (%d->%d)] Not breaking...\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
-				printf("[%s (%d->%d)] Sending message %s to dst...\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, msgFromSrc);
+				printf("[%s (%d->%d)] Not breaking...\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
+				printf("[%s (%d->%d)] Sending message %s to dst...\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, msgFromSrc);
 				send( pSockets->DstSocket, msgFromSrc, strlen(msgFromSrc), 0 );
 				break;
 			}
-			printf("[%s (%d->%d)] received msgFromDLL_closeSockets, but not exiting loop\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
+			printf("[%s (%d->%d)] received msgFromHKW_closeSockets, but not exiting loop\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
 			//break;
 		}
 		// send data from src to dst socket
-		printf("[%s (%d->%d)] Sending message %s to dst...\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, msgFromSrc);
+		printf("[%s (%d->%d)] Sending message %s to dst...\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, msgFromSrc);
 		iSendResult = send( pSockets->DstSocket, msgFromSrc, strlen(msgFromSrc), 0 );
 		if (iSendResult == SOCKET_ERROR) {
-			printf("[%s (%d->%d)] send to dst failed with error: %d\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, WSAGetLastError());
+			printf("[%s (%d->%d)] send to dst failed with error: %d\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, WSAGetLastError());
 			// Notify the Src that Dst is not connected yet:
 			char* msgFromServer = "msgFromServer_sendToDstFailed";
 			iSendResult = send( pSockets->SrcSocket, msgFromServer, strlen(msgFromServer), 0 );
@@ -79,11 +79,11 @@ DWORD WINAPI CommChannel( LPVOID lpParam ) {
 				WSACleanup();
 				return 1;	
 			}
-			printf("[%s (%d->%d)] sent to SRC 'msgFromServer_sendToDstFailed'\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);			
+			printf("[%s (%d->%d)] sent to SRC 'msgFromServer_sendToDstFailed'\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);			
 			continue;
 		}
 	}
-	printf("[%s (%d->%d)] Thread finished\n", pSockets->ID == WINDSPC ? "DLL" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
+	printf("[%s (%d->%d)] Thread finished\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);
 	free(msgFromSrc);
 	return 0;
 }
@@ -244,7 +244,6 @@ int main(int argc , char *argv[])
 							WSACleanup();
 							return 1;
 						}
-						printf("pCommThreadData[BTPROXY] = %d\n", pCommThreadData[BTPROXY]);
 						pCommThreadData[BTPROXY]->SrcSocket = BTProxyClientSocket;
 						if (hCommThread[WINDSPC] != NULL) {
 							pCommThreadData[BTPROXY]->DstSocket = pCommThreadData[WINDSPC]->SrcSocket;
