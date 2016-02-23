@@ -15,10 +15,7 @@
 #pragma comment(lib,"ws2_32.lib")
 
 // TODO
-// 1. Try showing on BT device two messages one after the other (Hooking wrapper running and finishes successfully, and then running again)
-// 2. Look for TODO in CloudServer.cpp - need to open a new thread for each accept, instead of opening both threads only after HKW & BTP are connected
-// 3. (probably the same as TODO #2) Add to CloudServer inifinite loop for accept connections (so it will stay alive forever)
-//		Do that by creating a different thead for each connection (inside this thread, two threads of commChannel should be opened)
+// 1. Add local discovery if remote discovery fails
 
 
 // =============================================================================
@@ -76,7 +73,10 @@ char* CloudServerAddr = "132.68.60.117";
 char* BTProxyIpAddr = "132.68.50.55"; 
 int BTProxyPort = 4020;
 char* BTDeviceName = "btdevice"; // TODO - in BT app, the pQuerySet should be initiated with the BT device name
-bool tcpIsNeeded = false; // if true, using TCP connection
+bool workWithCloudServer = true; // if true, using TCP connection. as default, connecting to CloudServer. 
+                         // if server has no BT device connected, this flag will turn false
+int remoteLookupsFails = 0;
+bool BTdeviceIsRemote = true;
 int lastError = 0;
 bool setLastErrorToWSA_E_NO_MORE = false;
 // =============================================================================
@@ -128,8 +128,7 @@ INT WINAPI MyWSALookupServiceBegin(_In_ LPWSAQUERYSET pQuerySet, _In_ DWORD dwFl
 	fclose(pLogFile);
 
 	// initiate a TCP connection 
-	if (!tcpIsNeeded && TCPSocket == INVALID_SOCKET) { // meaning TCP socket to BTProxy wasn't opened yet
-		tcpIsNeeded = true;
+	if (workWithCloudServer && TCPSocket == INVALID_SOCKET) { // meaning TCP socket to BTProxy wasn't opened yet
 		TCPSocket = pSocket(AF_INET, SOCK_STREAM, 0);
 		if (TCPSocket == INVALID_SOCKET) {
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
@@ -152,7 +151,7 @@ INT WINAPI MyWSALookupServiceBegin(_In_ LPWSAQUERYSET pQuerySet, _In_ DWORD dwFl
 		connectRes = pConnect(TCPSocket, (struct sockaddr *)&server, sizeof(server));
 		if (connectRes < 0) {
 			// if connect to BTProxy failed, run as a regular BT program.
-			tcpIsNeeded = false;
+			workWithCloudServer = false;
 			pClosesocket(TCPSocket);
 			TCPSocketClosed = true;
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
@@ -199,7 +198,7 @@ INT WINAPI MyWSALookupServiceNext(_In_ HANDLE hLookup, _In_ DWORD dwFlags, _Inou
 	fwprintf(pLogFile, L"[MyWSALookupServiceNext]\t Entered with dwFlags = %X\n", dwFlags);
 	fclose(pLogFile);
 
-	if (tcpIsNeeded) {
+	if (workWithCloudServer && BTdeviceIsRemote) {
 		// send a request for a device name from BT proxy
 		char *msgToBTproxy = "msgFromDLL_queryDevice";
 		iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
@@ -220,17 +219,26 @@ INT WINAPI MyWSALookupServiceNext(_In_ HANDLE hLookup, _In_ DWORD dwFlags, _Inou
 				fclose(pLogFile);
 				if (strcmp(recvBuf, "msgFromServer_sendToDstFailed") == 0) {
 					// meaning, btproxy isn't connected yet. Try to look locally
-					tcpIsNeeded = false;
+					workWithCloudServer = false;
 					fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 					fprintf(pLogFile, "[MyWSALookupServiceNext]\t recevied msgFromServer_sendToDstFailed, trying to look locally \n");
 					fclose(pLogFile);
 					iResult = pWSALookupServiceNext(hLookup, dwFlags, lpdwBufferLength, pResults);
+					BTdeviceIsRemote = false;
 					lastError = pWSAGetLastError();
 					return iResult;
 
 				}
 				if (strcmp(recvBuf, "msgFromBTProxy_WSA_E_NO_MORE") == 0) {
 					setLastErrorToWSA_E_NO_MORE = true; // will set WSA_E_NO_MORE as a return value from MyWSAGetLastError()
+					remoteLookupsFails++;
+					if (remoteLookupsFails == 2) {
+						fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+						fprintf(pLogFile, "[MyWSALookupServiceNext]\t Setting BTdeviceIsRemote = false\n");
+						fclose(pLogFile);
+						BTdeviceIsRemote = false; // meaning, try looking locally
+						remoteLookupsFails = 0;
+					}
 					fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 					fprintf(pLogFile, "[MyWSALookupServiceNext]\t setLastErrorToWSA_E_NO_MORE\n");
 					fclose(pLogFile);
@@ -240,7 +248,10 @@ INT WINAPI MyWSALookupServiceNext(_In_ HANDLE hLookup, _In_ DWORD dwFlags, _Inou
 				// 1. in name field we should return the name we got from BT Proxy
 				// 2. set a dummy MAC address (0xAABBCCDDEEFF)
 
+				//DBG begin
+				//pResults->lpszServiceInstanceName = convertCharArrayToLPCWSTR("faked_btdevice");
 				pResults->lpszServiceInstanceName = convertCharArrayToLPCWSTR(recvBuf);
+				//DBG end
 				
 				// allocate the dummy MAC
 				pDummyBtAddr = new SOCKADDR_BTH;
@@ -271,7 +282,7 @@ INT WINAPI MyWSALookupServiceNext(_In_ HANDLE hLookup, _In_ DWORD dwFlags, _Inou
 	else {
 		// tcp is not needed - call pWSALookupServiceNext
 		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-		fprintf(pLogFile, "[MyWSALookupServiceNext]\t TCP is not needed \n");
+		fprintf(pLogFile, "[MyWSALookupServiceNext]\t Calling original pWSALookupServiceNext\n");
 		fclose(pLogFile);
 		iResult = pWSALookupServiceNext(hLookup, dwFlags, lpdwBufferLength, pResults);
 		lastError = pWSAGetLastError();
@@ -300,7 +311,13 @@ SOCKET WSAAPI MySocket(_In_ int af, _In_ int type, _In_ int protocol)
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 	fprintf(pLogFile, "[MySocket]\t Entered\n");
 	fclose(pLogFile);
-	if (!tcpIsNeeded) {
+	
+	if (workWithCloudServer && BTdeviceIsRemote) {
+		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+		fprintf(pLogFile, "[MySocket]\t No need for BT socket\n");
+		fclose(pLogFile);
+		BTSocket = 100; // some random number that will never be used
+	} else {
 		BTSocket = pSocket(af, type, protocol);
 		if (BTSocket == INVALID_SOCKET) {
 			//MsgBox("BT socket failed with error\n");
@@ -316,12 +333,6 @@ SOCKET WSAAPI MySocket(_In_ int af, _In_ int type, _In_ int protocol)
 			fprintf(pLogFile, "[MySocket]\t opened BT socket number %d\n", BTSocket);
 			fclose(pLogFile);
 		}
-	}
-	else {
-		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-		fprintf(pLogFile, "[MySocket]\t No need for BT socket\n");
-		fclose(pLogFile);
-		BTSocket = 100; // some random number that will never be used
 	}
 
 	return BTSocket;
@@ -340,7 +351,7 @@ int WINAPI MyConnect(_In_ SOCKET s, _In_ const struct sockaddr *name, _In_ int n
 	fclose(pLogFile);
 
 	//MsgBox("HookDll : Entered MyConnect");
-	if (tcpIsNeeded) {
+	if (workWithCloudServer && BTdeviceIsRemote) {
 		// send a request for name from BT proxy
 		char *msgToBTproxy = "msgFromDLL_connect";
 		iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
@@ -366,7 +377,7 @@ int WINAPI MyConnect(_In_ SOCKET s, _In_ const struct sockaddr *name, _In_ int n
 		else {
 			//MsgBox("connect succeded");
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-			fprintf(pLogFile, "[MyConnect]\t BT Connect succeded\n");
+			fprintf(pLogFile, "[MyConnect]\t BT Connect succeded to socket %d\n", s);
 			fclose(pLogFile);
 		}
 	}
@@ -386,7 +397,7 @@ int WINAPI MySend(SOCKET s, const char* buf, int len, int flags)
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 	fprintf(pLogFile, "[MySend]\t Entered\n");
 	fclose(pLogFile);
-	if (tcpIsNeeded) {
+	if (workWithCloudServer && BTdeviceIsRemote) {
 		char *msgToBTproxy = "msgFromDLL_send";
 		iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
 		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
@@ -454,7 +465,7 @@ int WINAPI MySend(SOCKET s, const char* buf, int len, int flags)
 		else {
 			//MsgBox("send succeded");
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-			fprintf(pLogFile, "[MySend]\t BT send succeeded - %d\n", iResult);
+			fprintf(pLogFile, "[MySend]\t BT send succeeded - %s (%d Bytes)\n", buf, iResult);
 			fclose(pLogFile);
 		}
 	}
@@ -470,7 +481,7 @@ int WINAPI MyClosesocket(_In_ SOCKET s)
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 	fprintf(pLogFile, "[MyClosesocket]\t Entered\n");
 	fclose(pLogFile);
-	if (!TCPSocketClosed) {
+	if (!TCPSocketClosed && BTdeviceIsRemote) {
 		if (TCPSocket != INVALID_SOCKET) {
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 			fprintf(pLogFile, "[MyClosesocket]\t TCPSocket is alive\n");
@@ -488,7 +499,7 @@ int WINAPI MyClosesocket(_In_ SOCKET s)
 	int res1;
 	res1 = TCPSocketClosed ? 0 : pClosesocket(TCPSocket); // close socket only if it wasn't closed already
 	int res2;
-	res2 = tcpIsNeeded ? 0 : pClosesocket(BTSocket);
+	res2 = (BTdeviceIsRemote) ? 0 : pClosesocket(BTSocket);
 
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 	fprintf(pLogFile, "[MyClosesocket]\t Sockets closed - %d, %d (zeros are successes)\n", res1, res2);

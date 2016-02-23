@@ -1,4 +1,4 @@
-#define CXN_MAX_INQUIRY_RETRY             2
+#define CXN_MAX_INQUIRY_RETRY             3
 #define CXN_DELAY_NEXT_INQUIRY            5
 #define CXN_SUCCESS                       0
 #define CXN_ERROR                         1
@@ -18,6 +18,7 @@
 #pragma comment (lib, "Ws2_32.lib")
 #pragma comment (lib, "Mswsock.lib")
 #pragma comment (lib, "AdvApi32.lib")
+
 
 wchar_t *convertCharArrayToLPCWSTR(const char* charArray)
 {
@@ -231,7 +232,7 @@ int __cdecl main(int argc, char **argv)
 	WSADATA 		wsaData;
 	SOCKET 			LocalSocket = INVALID_SOCKET;
 	SOCKADDR_BTH    SockAddrBthServer;
-	//char			*RemoteBTName = "faked_btdevice";
+	char			*Faked_RemoteBTName = "faked_btdevice";
 	char			*RemoteBTName = "btdevice";
 	char 			*sendbuf = "Hello from DLL\n";
 	int 			iResult;
@@ -249,6 +250,7 @@ int __cdecl main(int argc, char **argv)
 	// =========================================
 	// Look for server address using Name
 	// =========================================
+	printf("[BTClient] calling NameToBthAddr with %s\n", RemoteBTName);
 	iResult = NameToBthAddr(RemoteBTName, &SockAddrBthServer);
 	if (iResult == CXN_ERROR) {
 		printf("[BTClient] NameToBthAddr failed\n");
@@ -258,6 +260,8 @@ int __cdecl main(int argc, char **argv)
 	else {
 		printf("[BTClient] %s's MAC is 0x%llX \n", RemoteBTName, SockAddrBthServer.btAddr);
 	}
+
+
 	// After the btAddr field is set (found using NameToBthAddr function),
 	// set the other parameters
 	SockAddrBthServer.addressFamily = AF_BTH;

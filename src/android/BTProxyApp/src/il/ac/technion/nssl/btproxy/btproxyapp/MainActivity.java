@@ -34,7 +34,9 @@ import android.widget.Button;
 import android.widget.TextView;
 
 
-
+// TODO
+// 1. Add clear log button
+// 2. check the discovery issue
 // =============================================================================
 // MainActivity class
 // =============================================================================
