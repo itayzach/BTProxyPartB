@@ -15,8 +15,9 @@
 #pragma comment(lib,"ws2_32.lib")
 
 // TODO
-// 1. Add local discovery if remote discovery fails
-
+// 1. Delete unwanted comments in the code
+// 2. Check if there are redundent flags (like TCPSocketClosed)
+// 3. Retreive IP address of CloudServer from URL
 
 // =============================================================================
 // Define hooking pointers
@@ -69,7 +70,7 @@ SOCKET BTSocket = INVALID_SOCKET;
 SOCKET TCPSocket = INVALID_SOCKET;
 struct addrinfo *result = NULL;
 bool TCPSocketClosed = false;
-char* CloudServerAddr = "132.68.60.117";
+char* CloudServerAddr = "104.45.149.160"; //"132.68.60.117";
 char* BTProxyIpAddr = "132.68.50.55"; 
 int BTProxyPort = 4020;
 char* BTDeviceName = "btdevice"; // TODO - in BT app, the pQuerySet should be initiated with the BT device name
@@ -151,9 +152,11 @@ INT WINAPI MyWSALookupServiceBegin(_In_ LPWSAQUERYSET pQuerySet, _In_ DWORD dwFl
 		connectRes = pConnect(TCPSocket, (struct sockaddr *)&server, sizeof(server));
 		if (connectRes < 0) {
 			// if connect to BTProxy failed, run as a regular BT program.
+			printf("[MyWSALookupServiceBegin]\t TCP Connect failed with error %d\n", pWSAGetLastError());
 			workWithCloudServer = false;
 			pClosesocket(TCPSocket);
 			TCPSocketClosed = true;
+			
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 			fprintf(pLogFile, "[MyWSALookupServiceBegin]\t TCP Connect failed\n");
 			fclose(pLogFile);

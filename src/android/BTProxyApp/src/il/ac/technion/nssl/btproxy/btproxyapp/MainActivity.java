@@ -9,8 +9,10 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.InetAddress;
+import java.net.MalformedURLException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,6 +39,10 @@ import android.widget.TextView;
 // TODO
 // 1. Add clear log button
 // 2. check the discovery issue
+// 3. Retrieve IP address from URL (app crashes on InetAddress.getByName(cloudServerURL.getHost());)
+// 4. Clear BLUE color from the Cloud Server IP when disconnected from CloudServer
+// 5. Delete unwanted comments in the code
+
 // =============================================================================
 // MainActivity class
 // =============================================================================
@@ -53,7 +59,10 @@ public class MainActivity extends Activity {
 	private ServerSocket TCPServerSocket;
 	private Socket TCPClientSocket = null;
 	private final int CLOUD_SERVER_PORT = 4020; //Define the server port
-	private final String CLOUD_SERVER_IP = "132.68.60.117";
+
+	//private final String CLOUD_SERVER_URL = "http://btpcs.eastus.cloudapp.azure.com";
+	private URL cloudServerURL;
+	private final String CLOUD_SERVER_IP = "104.45.149.160";//"132.68.60.117";//
 	//private Thread TCPserverThread = null;
 	private Thread TCPclientThread = null;
 	
@@ -122,6 +131,7 @@ public class MainActivity extends Activity {
 		BTDevicesList = new ArrayList<BTDeviceEntry>();
 		updateConversationHandler = new Handler();
 		changeColorUIThread = new Handler();
+		
 		final String initBTfoundText = (String) tvFoundBT.getText(); 
 		
 		btnRestart.setOnClickListener(new View.OnClickListener() {
@@ -168,7 +178,7 @@ public class MainActivity extends Activity {
 
 		// Find IP
 		//getDeviceIpAddress();
-		getCloudIpAddress();
+		
 		
 		// Wait for TCP connection from client
 		// TCPserverThread = new Thread(new TCPServerThread());
@@ -176,6 +186,14 @@ public class MainActivity extends Activity {
 		// TCPserverThread.start();
 		
 		// Connect to cloud server
+//		try {
+//			cloudServerURL = new URL(CLOUD_SERVER_URL);
+//		} catch (MalformedURLException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		}
+		android.util.Log.e("TrackingFlow", "created URL");
+		getCloudIpAddress();
 		TCPclientThread = new Thread(new TCPClientThread());
 		TCPclientThread.start();
 		
@@ -225,10 +243,22 @@ public class MainActivity extends Activity {
 	// getCloudIpAddress
 	// -------------------------------------------------------------------------
 	private void getCloudIpAddress() {
-		//inetAddr = InetAddress.getByName(<Microsoft Azure address>);
-		//tvServerIP.append(" " + inetAddr.toString());
 		tvServerIP.append(" " + CLOUD_SERVER_IP + ":" + CLOUD_SERVER_PORT);
 	}
+//	private InetAddress getCloudIpAddress() {
+//		android.util.Log.e("TrackingFlow", "getCloudIpAddress()");
+//		InetAddress inetAddr = null;
+//		try {
+//			android.util.Log.e("TrackingFlow", "before getByName");
+//			inetAddr = InetAddress.getByName(cloudServerURL.getHost());
+//			android.util.Log.e("TrackingFlow", "after getByName");
+//		} catch (UnknownHostException e) {
+//			e.printStackTrace();
+//		}
+//		//tvServerIP.append(" " + inetAddr.toString() + ":" + CLOUD_SERVER_PORT + "\n" + CLOUD_SERVER_URL);
+//		return inetAddr;
+//		//tvServerIP.append(" " + CLOUD_SERVER_IP + ":" + CLOUD_SERVER_PORT);
+//	}
 	
 	// -------------------------------------------------------------------------
 	// onCreateOptionsMenu
@@ -284,6 +314,11 @@ public class MainActivity extends Activity {
 			try {
 				// connect to the cloud server IP though the TCPClientSocket
 				serverAddr = InetAddress.getByName(CLOUD_SERVER_IP);
+				//serverAddr = getCloudIpAddress();
+//				if (serverAddr == null) {
+//					android.util.Log.e("TrackingFlow", "TCPClientThread : couldn't resolve " + CLOUD_SERVER_URL);
+//					return;
+//				}
 				TCPClientSocket = new Socket(serverAddr, CLOUD_SERVER_PORT);
 				OutputStreamWriter out = new OutputStreamWriter(TCPClientSocket.getOutputStream());
 				// send the id (btproxy)
