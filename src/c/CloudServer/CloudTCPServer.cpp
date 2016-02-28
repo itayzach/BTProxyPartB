@@ -71,15 +71,15 @@ DWORD WINAPI CommChannel( LPVOID lpParam ) {
 		if (iSendResult == SOCKET_ERROR) {
 			printf("[%s (%d->%d)] send to dst failed with error: %d\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket, WSAGetLastError());
 			// Notify the Src that Dst is not connected yet:
-			char* msgFromServer = "msgFromServer_sendToDstFailed";
-			iSendResult = send( pSockets->SrcSocket, msgFromServer, strlen(msgFromServer), 0 );
+			char* msgFromCS = "msgFromCS_sendToDstFailed";
+			iSendResult = send( pSockets->SrcSocket, msgFromCS, strlen(msgFromCS), 0 );
 
 			if (iSendResult == SOCKET_ERROR) {
 				closesocket(pSockets->SrcSocket);
 				WSACleanup();
 				return 1;	
 			}
-			printf("[%s (%d->%d)] sent to SRC 'msgFromServer_sendToDstFailed'\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);			
+			printf("[%s (%d->%d)] sent to SRC 'msgFromCS_sendToDstFailed'\n", pSockets->ID == WINDSPC ? "HKW" : "BTP", pSockets->SrcSocket, pSockets->DstSocket);			
 			continue;
 		}
 	}
