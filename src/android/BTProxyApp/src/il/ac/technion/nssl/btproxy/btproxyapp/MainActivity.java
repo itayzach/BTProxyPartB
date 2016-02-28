@@ -368,7 +368,7 @@ public class MainActivity extends Activity {
 					TCPbytesRead = TCPinputStream.read(TCPbyteBuf);
 					android.util.Log.e("TrackingFlow", "read " + TCPbytesRead);
 					if (TCPbytesRead < 0) {
-						updateConversationHandler.post(new updateUIThread("DLL->BTP : Read 0 bytes"));
+						updateConversationHandler.post(new updateUIThread("HKW->BTP : Read 0 bytes"));
 						break;
 					}
 					byteArrayOutputStream.write(TCPbyteBuf, 0, TCPbytesRead);
@@ -376,9 +376,9 @@ public class MainActivity extends Activity {
 					//TCPreadLine = TCPreadLine.replaceAll("\\s",""); // remove white spaces
 					android.util.Log.e("TrackingFlow", "read : " + TCPreadLine);
 					
-					if (TCPreadLine.equals("msgFromDLL_queryDevice")) {
-						android.util.Log.e("TrackingFlow", "received : msgFromDLL_queryDevice");
-						updateConversationHandler.post(new updateUIThread("DLL->BTP : queryDevice"));
+					if (TCPreadLine.equals("msgFromHKW_queryDevice")) {
+						android.util.Log.e("TrackingFlow", "received : msgFromHKW_queryDevice");
+						updateConversationHandler.post(new updateUIThread("HKW->BTP : queryDevice"));
 						PrintWriter TCPoutput = new PrintWriter(new BufferedWriter(
 								new OutputStreamWriter(TCPClientSocket.getOutputStream())),
 								true);
@@ -394,10 +394,10 @@ public class MainActivity extends Activity {
 							//android.util.Log.e("TrackingFlow", "finished discovery");
 						} else if (BTdevicesListIndex == BTDevicesList.size()) {
 							// meaning there are no more devices found
-							android.util.Log.e("TrackingFlow", "sending back msgFromBTProxy_WSA_E_NO_MORE");
-							TCPoutput.write("msgFromBTProxy_WSA_E_NO_MORE");
+							android.util.Log.e("TrackingFlow", "sending back msgFromBTP_WSA_E_NO_MORE");
+							TCPoutput.write("msgFromBTP_WSA_E_NO_MORE");
 							TCPoutput.flush();
-							updateConversationHandler.post(new updateUIThread("BTP->DLL : WSA_E_NO_MORE"));
+							updateConversationHandler.post(new updateUIThread("BTP->HKW : WSA_E_NO_MORE"));
 							continue;
 						}
 						while(BTDevicesList.size() == 0);
@@ -408,12 +408,12 @@ public class MainActivity extends Activity {
 						TCPoutput.write(BTdeviceEntry.getName());
 						TCPoutput.flush();
 						BTdevicesListIndex++;
-						updateConversationHandler.post(new updateUIThread("BTP->DLL : " + BTdeviceEntry.getName()));
+						updateConversationHandler.post(new updateUIThread("BTP->HKW : " + BTdeviceEntry.getName()));
 					}
-					else if (TCPreadLine.equals("msgFromDLL_connect")) {
-						android.util.Log.e("TrackingFlow", "received : msgFromDLL_connect");
+					else if (TCPreadLine.equals("msgFromHKW_connect")) {
+						android.util.Log.e("TrackingFlow", "received : msgFromHKW_connect");
 						android.util.Log.e("TrackingFlow", "MAC : " + BTdeviceEntry.getAddr());
-						updateConversationHandler.post(new updateUIThread("DLL->BTP : connect"));
+						updateConversationHandler.post(new updateUIThread("HKW->BTP : connect"));
 						remoteDevice = adapter.getRemoteDevice(BTdeviceEntry.getAddr());
 						android.util.Log.e("TrackingFlow", "after remoteDevice assign");
 						PrintWriter TCPoutput = new PrintWriter(new BufferedWriter(
@@ -427,19 +427,19 @@ public class MainActivity extends Activity {
 							connectToBTdevice();
 							android.util.Log.e("TrackingFlow", "Connected to BT device");
 						}
-						TCPoutput.write("msgFromBTProxy_connectedTo_" + BTdeviceEntry.getAddr());
+						TCPoutput.write("msgFromBTP_connectedTo_" + BTdeviceEntry.getAddr());
 						TCPoutput.flush();
-						updateConversationHandler.post(new updateUIThread("BTP->DLL : connected to " + BTdeviceEntry.getAddr()));
+						updateConversationHandler.post(new updateUIThread("BTP->HKW : connected to " + BTdeviceEntry.getAddr()));
 						changeColorUIThread.post(new changeColorUIThread(Color.BLUE, tvServerIP));
 					}
-					else if (TCPreadLine.equals("msgFromDLL_send")) {
-						updateConversationHandler.post(new updateUIThread("DLL->BTP : send"));
+					else if (TCPreadLine.equals("msgFromHKW_send")) {
+						updateConversationHandler.post(new updateUIThread("HKW->BTP : send"));
 						// read actual message from DLL
-						android.util.Log.e("TrackingFlow", "received : msgFromDLL_send");
+						android.util.Log.e("TrackingFlow", "received : msgFromHKW_send");
 						BTOutputStream = new OutputStreamWriter(BTSocket.getOutputStream());
 						android.util.Log.e("TrackingFlow", "waiting for TCP message...");
 						TCPreadLine = TCPbufReader.readLine();
-						updateConversationHandler.post(new updateUIThread("DLL->BTP : " + TCPreadLine));
+						updateConversationHandler.post(new updateUIThread("HKW->BTP : " + TCPreadLine));
 						android.util.Log.e("TrackingFlow", "sending to BT device the following : " + TCPreadLine);
 						BTOutputStream.write(TCPreadLine + System.getProperty("line.separator"));
 						BTOutputStream.flush();
@@ -447,19 +447,19 @@ public class MainActivity extends Activity {
 						PrintWriter TCPoutput = new PrintWriter(new BufferedWriter(
 								new OutputStreamWriter(TCPClientSocket.getOutputStream())),
 								true);
-						TCPoutput.write("msgFromBTProxy_sentToBTdevice");
+						TCPoutput.write("msgFromBTP_sentToBTdevice");
 						TCPoutput.flush();
-						updateConversationHandler.post(new updateUIThread("BTP->DLL : sentToBTdevice"));
+						updateConversationHandler.post(new updateUIThread("BTP->HKW : sentToBTdevice"));
 						android.util.Log.e("TrackingFlow", "finished sending");
 					}
-					else if (TCPreadLine.equals("msgFromDLL_closeSockets")) {
-						android.util.Log.e("TrackingFlow", "received : msgFromDLL_closeSockets");
+					else if (TCPreadLine.equals("msgFromHKW_closeSockets")) {
+						android.util.Log.e("TrackingFlow", "received : msgFromHKW_closeSockets");
 						if (BTSocket != null) {
 							changeColorUIThread.post(new changeColorUIThread(Color.BLACK, tvFoundBT));
 							BTOutputStream.close();
 							BTSocket.close();
 						}
-						updateConversationHandler.post(new updateUIThread("DLL->BTP : closeSockets"));
+						updateConversationHandler.post(new updateUIThread("HKW->BTP : closeSockets"));
 						BTDevicesList.clear();
 						BTdevicesListIndex = 0;
 						if(adapter != null && adapter.isDiscovering()) {

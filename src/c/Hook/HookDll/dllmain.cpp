@@ -203,7 +203,7 @@ INT WINAPI MyWSALookupServiceNext(_In_ HANDLE hLookup, _In_ DWORD dwFlags, _Inou
 
 	if (workWithCloudServer && BTdeviceIsRemote) {
 		// send a request for a device name from BT proxy
-		char *msgToBTproxy = "msgFromDLL_queryDevice";
+		char *msgToBTproxy = "msgFromHKW_queryDevice";
 		iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
 
 		if (iResult) {
@@ -220,11 +220,11 @@ INT WINAPI MyWSALookupServiceNext(_In_ HANDLE hLookup, _In_ DWORD dwFlags, _Inou
 				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 				fprintf(pLogFile, "[MyWSALookupServiceNext]\t Received %s (%d Bytes)\n", recvBuf, iResult);
 				fclose(pLogFile);
-				if (strcmp(recvBuf, "msgFromServer_sendToDstFailed") == 0) {
+				if (strcmp(recvBuf, "msgFromCS_sendToDstFailed") == 0) {
 					// meaning, btproxy isn't connected yet. Try to look locally
 					workWithCloudServer = false;
 					fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-					fprintf(pLogFile, "[MyWSALookupServiceNext]\t recevied msgFromServer_sendToDstFailed, trying to look locally \n");
+					fprintf(pLogFile, "[MyWSALookupServiceNext]\t recevied msgFromCS_sendToDstFailed, trying to look locally \n");
 					fclose(pLogFile);
 					iResult = pWSALookupServiceNext(hLookup, dwFlags, lpdwBufferLength, pResults);
 					BTdeviceIsRemote = false;
@@ -232,7 +232,7 @@ INT WINAPI MyWSALookupServiceNext(_In_ HANDLE hLookup, _In_ DWORD dwFlags, _Inou
 					return iResult;
 
 				}
-				if (strcmp(recvBuf, "msgFromBTProxy_WSA_E_NO_MORE") == 0) {
+				if (strcmp(recvBuf, "msgFromBTP_WSA_E_NO_MORE") == 0) {
 					setLastErrorToWSA_E_NO_MORE = true; // will set WSA_E_NO_MORE as a return value from MyWSAGetLastError()
 					remoteLookupsFails++;
 					if (remoteLookupsFails == 2) {
@@ -356,7 +356,7 @@ int WINAPI MyConnect(_In_ SOCKET s, _In_ const struct sockaddr *name, _In_ int n
 	//MsgBox("HookDll : Entered MyConnect");
 	if (workWithCloudServer && BTdeviceIsRemote) {
 		// send a request for name from BT proxy
-		char *msgToBTproxy = "msgFromDLL_connect";
+		char *msgToBTproxy = "msgFromHKW_connect";
 		iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
 		if (iResult) {
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
@@ -401,14 +401,14 @@ int WINAPI MySend(SOCKET s, const char* buf, int len, int flags)
 	fprintf(pLogFile, "[MySend]\t Entered\n");
 	fclose(pLogFile);
 	if (workWithCloudServer && BTdeviceIsRemote) {
-		char *msgToBTproxy = "msgFromDLL_send";
+		char *msgToBTproxy = "msgFromHKW_send";
 		iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
 		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 		fprintf(pLogFile, "[MySend]\t Sent command : %s", msgToBTproxy);
 		fclose(pLogFile);
 
 		if (iResult) {
-			// msgFromDLL_send was sent successfully. send actual message
+			// msgFromHKW_send was sent successfully. send actual message
 			iResult = pSend(TCPSocket, buf, strlen(buf), flags);
 			if (iResult == SOCKET_ERROR) {
 				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
@@ -489,7 +489,7 @@ int WINAPI MyClosesocket(_In_ SOCKET s)
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 			fprintf(pLogFile, "[MyClosesocket]\t TCPSocket is alive\n");
 			fclose(pLogFile);
-			char *msgToBTproxy = "msgFromDLL_closeSockets";
+			char *msgToBTproxy = "msgFromHKW_closeSockets";
 			iResult = pSend(TCPSocket, msgToBTproxy, strlen(msgToBTproxy), 0);
 			if (iResult) {
 				fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
