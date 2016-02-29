@@ -1,0 +1,9 @@
+20150510102451639 4928 50.60: sltestp: hello world!
+20150510102451639 ---- --.60: Client closed pipe.
+20150510102451655 2680 50.60: sltest: Hello World! [1 of 4]
+20150510102451655 2680 50.60: sltest: Hello World! [2 of 4]
+20150510102451655 2680 50.60: sltest: Hello World! [3 of 4]
+20150510102451655 2680 50.60: sltest: Hello World! [4 of 4]
+20150510102451655 ---- --.50: Client requested terminate on next connection close.
+20150510102451655 2680 50.50: sltest: Requesting exit on close.
+20150510102451655 ---- --.60: Client closed pipe.
