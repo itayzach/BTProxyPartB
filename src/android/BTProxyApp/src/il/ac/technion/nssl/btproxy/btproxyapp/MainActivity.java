@@ -50,8 +50,7 @@ public class MainActivity extends Activity {
 	private Button btnRestart;
 	final Context context = this;
 	private TextView tvCmdLog;
-	private Handler updateConversationHandler;
-	private Handler changeColorUIThread;
+	private Handler updateActivityHandler;
 	// -------------------------------------------------------------------------
 	// TCP variables
 	// -------------------------------------------------------------------------
@@ -60,9 +59,8 @@ public class MainActivity extends Activity {
 	private Socket TCPClientSocket = null;
 	private final int CLOUD_SERVER_PORT = 4020; //Define the server port
 
-	//private final String CLOUD_SERVER_URL = "http://btpcs.eastus.cloudapp.azure.com";
-	private URL cloudServerURL;
-	private final String CLOUD_SERVER_IP = "104.45.149.160";//"132.68.60.117";//
+	private final String CLOUD_SERVER_URL = "btpcs.eastus.cloudapp.azure.com";
+	//private final String CLOUD_SERVER_IP = "104.45.149.160";//"132.68.60.117";//
 	//private Thread TCPserverThread = null;
 	private Thread TCPclientThread = null;
 	
@@ -77,11 +75,10 @@ public class MainActivity extends Activity {
 	private OutputStreamWriter BTOutputStream;
 	private BluetoothDevice remoteDevice;
 	private List<BTDeviceEntry> BTDevicesList;
-	private boolean startedDiscovery = false;
 	private final BroadcastReceiver discoveryResult = new BroadcastReceiver() {
 		@Override
 		public void onReceive(Context context, Intent intent) {
-			android.util.Log.e("TrackingFlow", "Entered onReceive");
+			android.util.Log.e("TrackingFlow", "[BroadcastReceiver] Entered onReceive");
 	        String action = intent.getAction();
 	        // When discovery finds a device
 	        if (BluetoothDevice.ACTION_FOUND.equals(action)) {
@@ -89,18 +86,21 @@ public class MainActivity extends Activity {
 	            BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
 	            // add the name and address to the map
 	            BTDeviceEntry btEntry = new BTDeviceEntry(device.getName(), device.getAddress());
-	            BTDevicesList.add(btEntry);
-	            updateConversationHandler.post(new updateUIThread("BTP added to BTDevicesList : " + btEntry.getName() + "[" + btEntry.getAddr() + "]"));
-	            android.util.Log.e("TrackingFlow", "Added - name = " + btEntry.getName() + " addr = " + btEntry.getAddr());
-	            
+	            if (!(device.getName().equals("BTPROXY"))) {
+	            	BTDevicesList.add(btEntry);
+		            updateActivityHandler.post(new updateUIThread("BTP added to BTDevicesList : " + btEntry.getName() + "[" + btEntry.getAddr() + "]"));
+		            android.util.Log.e("TrackingFlow", "[BroadcastReceiver] Added - name = " + btEntry.getName() + " addr = " + btEntry.getAddr());
+		            
+	            } else {
+	            	android.util.Log.e("TrackingFlow", "[BroadcastReceiver] Found myself");
+	            }
 	        }
-	        startedDiscovery = true;
 		}
 	};
 	
 	private void connectToBTdevice() { 
 		try {
-			android.util.Log.e("TrackingFlow", "Found: " + remoteDevice.getName());
+			android.util.Log.e("TrackingFlow", "[connectToBTdevice] Found: " + remoteDevice.getName());
 			UUID uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 			BTSocket = remoteDevice.createRfcommSocketToServiceRecord(uuid);
 			runOnUiThread(new Runnable() {	
@@ -110,7 +110,7 @@ public class MainActivity extends Activity {
 				}
 			});
 			BTSocket.connect();
-			changeColorUIThread.post(new changeColorUIThread(Color.BLUE, tvFoundBT));
+			updateActivityHandler.post(new changeColorUIThread(Color.BLUE, tvFoundBT));
 		}
 		catch (IOException e) {e.printStackTrace();}
 	}
@@ -129,17 +129,19 @@ public class MainActivity extends Activity {
 		tvCmdLog = (TextView) findViewById(R.id.textViewCmdLog);
 		btnRestart = (Button) findViewById(R.id.btnRestart);
 		BTDevicesList = new ArrayList<BTDeviceEntry>();
-		updateConversationHandler = new Handler();
-		changeColorUIThread = new Handler();
+		updateActivityHandler = new Handler();
 		
-		final String initBTfoundText = (String) tvFoundBT.getText(); 
+		final String initBTfoundText = (String) tvFoundBT.getText();
+		final String initServerIPText = (String) tvServerIP.getText(); 
+
 		
 		btnRestart.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) { 
-				android.util.Log.e("TrackingFlow", "Restarting TCP server...");
+				android.util.Log.e("TrackingFlow", "[btnRestart] Restarting TCP server...");
 				tvFoundBT.setText(initBTfoundText);
 				tvFoundBT.setTextColor(Color.BLACK);
+				tvServerIP.setText(initServerIPText);
 				tvServerIP.setTextColor(Color.BLACK);
 				tvCmdLog.setText("");
 				try{
@@ -154,7 +156,7 @@ public class MainActivity extends Activity {
 						TCPServerSocket.close();
 					}
 				} catch(Exception e) {
-					android.util.Log.e("TrackingFlow", "onClick exception when closing sockets: " + e.getMessage());
+					android.util.Log.e("TrackingFlow", "[btnRestart] onClick exception when closing sockets: " + e.getMessage());
 				}
 				//TCPserverThread = new Thread(new TCPServerThread());
 				//TCPserverThread.start();
@@ -170,7 +172,6 @@ public class MainActivity extends Activity {
 					adapter.cancelDiscovery();
 				}
 				BTDevicesList.clear();
-				startedDiscovery = false;
 				//adapter.startDiscovery();
 
 			}
@@ -185,21 +186,12 @@ public class MainActivity extends Activity {
 		// android.util.Log.e("TrackingFlow", "Before start");
 		// TCPserverThread.start();
 		
-		// Connect to cloud server
-//		try {
-//			cloudServerURL = new URL(CLOUD_SERVER_URL);
-//		} catch (MalformedURLException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
-//		}
-		android.util.Log.e("TrackingFlow", "created URL");
-		getCloudIpAddress();
+		//getCloudIpAddress();
 		TCPclientThread = new Thread(new TCPClientThread());
 		TCPclientThread.start();
 		
 		// Start BT discovery
-		registerReceiver(discoveryResult, new IntentFilter(BluetoothDevice.ACTION_FOUND));
-		adapter = BluetoothAdapter.getDefaultAdapter();
+		
 //		if(adapter != null && adapter.isDiscovering()) {
 //			adapter.cancelDiscovery();
 //		}
@@ -235,31 +227,10 @@ public class MainActivity extends Activity {
 				adapter.cancelDiscovery();
 			}
 		} catch(Exception e) {
-			android.util.Log.e("TrackingFlow", "onDestroy exception when closing sockets: " + e.getMessage());
+			android.util.Log.e("TrackingFlow", "[onDestroy] onDestroy exception when closing sockets: " + e.getMessage());
 		}
 	}
 
-	// -------------------------------------------------------------------------
-	// getCloudIpAddress
-	// -------------------------------------------------------------------------
-	private void getCloudIpAddress() {
-		tvServerIP.append(" " + CLOUD_SERVER_IP + ":" + CLOUD_SERVER_PORT);
-	}
-//	private InetAddress getCloudIpAddress() {
-//		android.util.Log.e("TrackingFlow", "getCloudIpAddress()");
-//		InetAddress inetAddr = null;
-//		try {
-//			android.util.Log.e("TrackingFlow", "before getByName");
-//			inetAddr = InetAddress.getByName(cloudServerURL.getHost());
-//			android.util.Log.e("TrackingFlow", "after getByName");
-//		} catch (UnknownHostException e) {
-//			e.printStackTrace();
-//		}
-//		//tvServerIP.append(" " + inetAddr.toString() + ":" + CLOUD_SERVER_PORT + "\n" + CLOUD_SERVER_URL);
-//		return inetAddr;
-//		//tvServerIP.append(" " + CLOUD_SERVER_IP + ":" + CLOUD_SERVER_PORT);
-//	}
-	
 	// -------------------------------------------------------------------------
 	// onCreateOptionsMenu
 	// -------------------------------------------------------------------------
@@ -288,21 +259,21 @@ public class MainActivity extends Activity {
 		public void run() {
 			try {
 				TCPServerSocket = new ServerSocket(CLOUD_SERVER_PORT);
-				android.util.Log.e("TrackingFlow", "Created TCP server");
+				android.util.Log.e("TrackingFlow", "[TCPServerThread] Created TCP server");
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
 			try {
-				android.util.Log.e("TrackingFlow", "Waiting for TCP connections");
+				android.util.Log.e("TrackingFlow", "[TCPServerThread] Waiting for TCP connections");
 				TCPClientSocket = TCPServerSocket.accept();
-				android.util.Log.e("TrackingFlow", "Connection accepted");
+				android.util.Log.e("TrackingFlow", "[TCPServerThread] Connection accepted");
 				TCPCommThread TCPcommThread = new TCPCommThread();
 				new Thread(TCPcommThread).start();
 
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-			android.util.Log.e("TrackingFlow", "TCPServerThread ended");
+			android.util.Log.e("TrackingFlow", "[TCPServerThread] TCPServerThread ended");
 		}
 	}
 	
@@ -313,20 +284,20 @@ public class MainActivity extends Activity {
 			InetAddress serverAddr;
 			try {
 				// connect to the cloud server IP though the TCPClientSocket
-				serverAddr = InetAddress.getByName(CLOUD_SERVER_IP);
+				android.util.Log.e("TrackingFlow", "[TCPClientThread] before serverAddr");
+				serverAddr = InetAddress.getByName(CLOUD_SERVER_URL);
+				android.util.Log.e("TrackingFlow", "[TCPClientThread] Found IP: " + serverAddr.getHostAddress());
 				//serverAddr = getCloudIpAddress();
-//				if (serverAddr == null) {
-//					android.util.Log.e("TrackingFlow", "TCPClientThread : couldn't resolve " + CLOUD_SERVER_URL);
-//					return;
-//				}
 				TCPClientSocket = new Socket(serverAddr, CLOUD_SERVER_PORT);
 				OutputStreamWriter out = new OutputStreamWriter(TCPClientSocket.getOutputStream());
 				// send the id (btproxy)
 				out.write("btproxy");
 				out.flush();
-				android.util.Log.e("TrackingFlow", "sent btproxy as id to TCP server");
-				// change the TextView color to identify the valid conenction
-				changeColorUIThread.post(new changeColorUIThread(Color.BLUE, tvServerIP));
+				android.util.Log.e("TrackingFlow", "[TCPClientThread] sent btproxy as id to TCP server");
+				// change the TextView color to identify the valid connection
+				updateActivityHandler.post(new updateTVUIThread("\n" + CLOUD_SERVER_URL, tvServerIP));
+				updateActivityHandler.post(new updateTVUIThread("\nIP: " + serverAddr.getHostAddress() + ":" + CLOUD_SERVER_PORT, tvServerIP));
+				updateActivityHandler.post(new changeColorUIThread(Color.BLUE, tvServerIP));
 				// run the comm thread for the DLL<->BTP messages pipe
 				TCPCommThread TCPcommThread = new TCPCommThread();
 				new Thread(TCPcommThread).start();
@@ -363,119 +334,156 @@ public class MainActivity extends Activity {
 			                  new ByteArrayOutputStream(1024);
 					int TCPbytesRead = 0;
 					InputStream TCPinputStream = TCPClientSocket.getInputStream();
-					android.util.Log.e("TrackingFlow", "before read. BTdevicesListIndex = " + BTdevicesListIndex + " size = " + BTDevicesList.size());
+					android.util.Log.e("TrackingFlow", "[TCPClientThread] before read. BTdevicesListIndex = " + BTdevicesListIndex + " size = " + BTDevicesList.size());
 					//String TCPreadLine = TCPbufReader.readLine();
 					TCPbytesRead = TCPinputStream.read(TCPbyteBuf);
-					android.util.Log.e("TrackingFlow", "read " + TCPbytesRead);
+					android.util.Log.e("TrackingFlow", "[TCPClientThread] read " + TCPbytesRead);
 					if (TCPbytesRead < 0) {
-						updateConversationHandler.post(new updateUIThread("HKW->BTP : Read 0 bytes"));
+						updateActivityHandler.post(new updateUIThread("HKW->BTP : Read 0 bytes"));
 						break;
 					}
 					byteArrayOutputStream.write(TCPbyteBuf, 0, TCPbytesRead);
 					TCPreadLine += byteArrayOutputStream.toString("UTF-8");
 					//TCPreadLine = TCPreadLine.replaceAll("\\s",""); // remove white spaces
-					android.util.Log.e("TrackingFlow", "read : " + TCPreadLine);
+					android.util.Log.e("TrackingFlow", "[TCPClientThread] read : " + TCPreadLine);
 					
 					if (TCPreadLine.equals("msgFromHKW_queryDevice")) {
-						android.util.Log.e("TrackingFlow", "received : msgFromHKW_queryDevice");
-						updateConversationHandler.post(new updateUIThread("HKW->BTP : queryDevice"));
+						android.util.Log.e("TrackingFlow", "[TCPClientThread] received : msgFromHKW_queryDevice");
+						updateActivityHandler.post(new updateUIThread("HKW->BTP : queryDevice"));
 						PrintWriter TCPoutput = new PrintWriter(new BufferedWriter(
 								new OutputStreamWriter(TCPClientSocket.getOutputStream())),
 								true);
 						if (BTdevicesListIndex == 0) {
 							// Start BT discovery
+							registerReceiver(discoveryResult, new IntentFilter(BluetoothDevice.ACTION_FOUND));
+							adapter = BluetoothAdapter.getDefaultAdapter();
 							if(adapter.isDiscovering()) {
-								android.util.Log.e("TrackingFlow", "cancaling discovery");
+								android.util.Log.e("TrackingFlow", "[TCPClientThread] cancaling discovery");
 								adapter.cancelDiscovery();
 							}
 							adapter.startDiscovery();
-							android.util.Log.e("TrackingFlow", "started discovery");
+							android.util.Log.e("TrackingFlow", "[TCPClientThread] started discovery");
+							int discoveryTries = 0;
+							while ((BTDevicesList.size() == 0) && discoveryTries < 5) {
+								android.util.Log.e("TrackingFlow", "[TCPClientThread] sleeping for 500ms, tries = " + discoveryTries);
+								Thread.sleep(500);
+								discoveryTries++;
+							}
+							if (BTDevicesList.size() == 0) {
+								android.util.Log.e("TrackingFlow", "[TCPClientThread] didn't find any BT devices");
+								android.util.Log.e("TrackingFlow", "[TCPClientThread] sending back msgFromBTP_WSA_E_NO_MORE");
+								TCPoutput.write("msgFromBTP_WSA_E_NO_MORE");
+								TCPoutput.flush();
+								updateActivityHandler.post(new updateUIThread("BTP->HKW : WSA_E_NO_MORE"));
+								continue;
+							}
 							//while(!startedDiscovery);
-							//android.util.Log.e("TrackingFlow", "finished discovery");
+							//android.util.Log.e("TrackingFlow", "[TCPClientThread] finished discovery");
 						} else if (BTdevicesListIndex == BTDevicesList.size()) {
 							// meaning there are no more devices found
-							android.util.Log.e("TrackingFlow", "sending back msgFromBTP_WSA_E_NO_MORE");
+							android.util.Log.e("TrackingFlow", "[TCPClientThread] sending back msgFromBTP_WSA_E_NO_MORE");
 							TCPoutput.write("msgFromBTP_WSA_E_NO_MORE");
 							TCPoutput.flush();
-							updateConversationHandler.post(new updateUIThread("BTP->HKW : WSA_E_NO_MORE"));
+							updateActivityHandler.post(new updateUIThread("BTP->HKW : WSA_E_NO_MORE"));
 							continue;
 						}
-						while(BTDevicesList.size() == 0);
-						android.util.Log.e("TrackingFlow", "A device was added");
+
 						BTdeviceEntry = BTDevicesList.get(BTdevicesListIndex);
-						android.util.Log.e("TrackingFlow", "sending back this : " + BTdeviceEntry.getName());
-						android.util.Log.e("TrackingFlow", "matching index : " + BTdevicesListIndex);
+						android.util.Log.e("TrackingFlow", "[TCPClientThread] sending back this : " + BTdeviceEntry.getName());
+						android.util.Log.e("TrackingFlow", "[TCPClientThread] matching index : " + BTdevicesListIndex);
 						TCPoutput.write(BTdeviceEntry.getName());
 						TCPoutput.flush();
 						BTdevicesListIndex++;
-						updateConversationHandler.post(new updateUIThread("BTP->HKW : " + BTdeviceEntry.getName()));
+						updateActivityHandler.post(new updateUIThread("BTP->HKW : " + BTdeviceEntry.getName()));
 					}
 					else if (TCPreadLine.equals("msgFromHKW_connect")) {
-						android.util.Log.e("TrackingFlow", "received : msgFromHKW_connect");
-						android.util.Log.e("TrackingFlow", "MAC : " + BTdeviceEntry.getAddr());
-						updateConversationHandler.post(new updateUIThread("HKW->BTP : connect"));
+						android.util.Log.e("TrackingFlow", "[TCPClientThread] received : msgFromHKW_connect");
+						android.util.Log.e("TrackingFlow", "[TCPClientThread] MAC : " + BTdeviceEntry.getAddr());
+						updateActivityHandler.post(new updateUIThread("HKW->BTP : connect"));
 						remoteDevice = adapter.getRemoteDevice(BTdeviceEntry.getAddr());
-						android.util.Log.e("TrackingFlow", "after remoteDevice assign");
+						android.util.Log.e("TrackingFlow", "[TCPClientThread] after remoteDevice assign");
 						PrintWriter TCPoutput = new PrintWriter(new BufferedWriter(
 								new OutputStreamWriter(TCPClientSocket.getOutputStream())),
 								true);
-						android.util.Log.e("TrackingFlow", "connecting to " + BTdeviceEntry.getAddr() + "...");
+						android.util.Log.e("TrackingFlow", "[TCPClientThread] connecting to " + BTdeviceEntry.getAddr() + "...");
 						if (BTSocket == null) {
 							connectToBTdevice();
-							android.util.Log.e("TrackingFlow", "Connected to BT device");
+							android.util.Log.e("TrackingFlow", "[TCPClientThread] Connected to BT device");
 						} else if (!BTSocket.isConnected()) {
 							connectToBTdevice();
-							android.util.Log.e("TrackingFlow", "Connected to BT device");
+							android.util.Log.e("TrackingFlow", "[TCPClientThread] Connected to BT device");
 						}
 						TCPoutput.write("msgFromBTP_connectedTo_" + BTdeviceEntry.getAddr());
 						TCPoutput.flush();
-						updateConversationHandler.post(new updateUIThread("BTP->HKW : connected to " + BTdeviceEntry.getAddr()));
-						changeColorUIThread.post(new changeColorUIThread(Color.BLUE, tvServerIP));
+						updateActivityHandler.post(new updateUIThread("BTP->HKW : connected to " + BTdeviceEntry.getAddr()));
+						updateActivityHandler.post(new changeColorUIThread(Color.BLUE, tvServerIP));
 					}
 					else if (TCPreadLine.equals("msgFromHKW_send")) {
-						updateConversationHandler.post(new updateUIThread("HKW->BTP : send"));
+						updateActivityHandler.post(new updateUIThread("HKW->BTP : send"));
 						// read actual message from DLL
-						android.util.Log.e("TrackingFlow", "received : msgFromHKW_send");
+						android.util.Log.e("TrackingFlow", "[TCPClientThread] received : msgFromHKW_send");
 						BTOutputStream = new OutputStreamWriter(BTSocket.getOutputStream());
-						android.util.Log.e("TrackingFlow", "waiting for TCP message...");
+						android.util.Log.e("TrackingFlow", "[TCPClientThread] waiting for TCP message...");
 						TCPreadLine = TCPbufReader.readLine();
-						updateConversationHandler.post(new updateUIThread("HKW->BTP : " + TCPreadLine));
-						android.util.Log.e("TrackingFlow", "sending to BT device the following : " + TCPreadLine);
+						updateActivityHandler.post(new updateUIThread("HKW->BTP : " + TCPreadLine));
+						android.util.Log.e("TrackingFlow", "[TCPClientThread] sending to BT device the following : " + TCPreadLine);
 						BTOutputStream.write(TCPreadLine + System.getProperty("line.separator"));
 						BTOutputStream.flush();
-						updateConversationHandler.post(new updateUIThread("BTP->BTD : " + TCPreadLine));
+						updateActivityHandler.post(new updateUIThread("BTP->BTD : " + TCPreadLine));
 						PrintWriter TCPoutput = new PrintWriter(new BufferedWriter(
 								new OutputStreamWriter(TCPClientSocket.getOutputStream())),
 								true);
 						TCPoutput.write("msgFromBTP_sentToBTdevice");
 						TCPoutput.flush();
-						updateConversationHandler.post(new updateUIThread("BTP->HKW : sentToBTdevice"));
-						android.util.Log.e("TrackingFlow", "finished sending");
+						updateActivityHandler.post(new updateUIThread("BTP->HKW : sentToBTdevice"));
+						android.util.Log.e("TrackingFlow", "[TCPClientThread] finished sending");
 					}
 					else if (TCPreadLine.equals("msgFromHKW_closeSockets")) {
-						android.util.Log.e("TrackingFlow", "received : msgFromHKW_closeSockets");
+						android.util.Log.e("TrackingFlow", "[TCPClientThread] received : msgFromHKW_closeSockets");
 						if (BTSocket != null) {
-							changeColorUIThread.post(new changeColorUIThread(Color.BLACK, tvFoundBT));
+							updateActivityHandler.post(new changeColorUIThread(Color.BLACK, tvFoundBT));
 							BTOutputStream.close();
 							BTSocket.close();
 						}
-						updateConversationHandler.post(new updateUIThread("HKW->BTP : closeSockets"));
+						updateActivityHandler.post(new updateUIThread("HKW->BTP : closeSockets"));
 						BTDevicesList.clear();
 						BTdevicesListIndex = 0;
 						if(adapter != null && adapter.isDiscovering()) {
 							adapter.cancelDiscovery();
 						}
-						updateConversationHandler.post(new updateUIThread("BTP cleared devices list"));
+						updateActivityHandler.post(new updateUIThread("BTP cleared devices list"));
 						
 					}
-					android.util.Log.e("TrackingFlow", "end of iteration");
+					android.util.Log.e("TrackingFlow", "[TCPClientThread] end of iteration");
 
 				} catch (IOException e) {
 					e.printStackTrace();
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
 			}
-			android.util.Log.e("TrackingFlow", "TCPCommThread was ended");
+			android.util.Log.e("TrackingFlow", "[TCPClientThread] TCPCommThread was ended");
+			updateActivityHandler.post(new changeColorUIThread(Color.BLACK, tvServerIP));
 			
+		}
+	}
+	
+	class updateTVUIThread implements Runnable {
+		private String msg;
+		private TextView tv;
+		private final StringBuilder sb = new StringBuilder();
+		
+		public updateTVUIThread(String result, TextView tv) {
+			this.msg = result;
+			this.tv = tv;
+			sb.append(msg);
+		}
+
+		@Override
+		public void run() {
+			// add to scrollview the commands log:
+			tv.setText(tv.getText().toString() + msg);
 		}
 	}
 	
@@ -492,7 +500,6 @@ public class MainActivity extends Activity {
 		public void run() {
 			// add to scrollview the commands log:
 			tvCmdLog.setText(tvCmdLog.getText().toString() + msg + "\n");
-
 		}
 	}
 	

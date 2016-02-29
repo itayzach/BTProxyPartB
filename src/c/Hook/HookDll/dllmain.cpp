@@ -66,20 +66,20 @@ void MsgBox(char *str) {
 // =============================================================================
 // Global variables
 // =============================================================================
-SOCKET BTSocket = INVALID_SOCKET;
 SOCKET TCPSocket = INVALID_SOCKET;
 struct addrinfo *result = NULL;
 bool TCPSocketClosed = false;
-char* CloudServerAddr = "104.45.149.160"; //"132.68.60.117";
-char* BTProxyIpAddr = "132.68.50.55"; 
+//char* CloudServerAddr = NULL;  //"104.45.149.160"; //"132.68.60.117";
+char* CloudServerHostName = "btpcs.eastus.cloudapp.azure.com";
 int BTProxyPort = 4020;
-char* BTDeviceName = "btdevice"; // TODO - in BT app, the pQuerySet should be initiated with the BT device name
 bool workWithCloudServer = true; // if true, using TCP connection. as default, connecting to CloudServer. 
                          // if server has no BT device connected, this flag will turn false
 int remoteLookupsFails = 0;
+bool resolvedDNS = false;
 bool BTdeviceIsRemote = true;
 int lastError = 0;
 bool setLastErrorToWSA_E_NO_MORE = false;
+struct hostent *remoteHost = NULL;
 // =============================================================================
 // Hooked functions
 // =============================================================================
@@ -119,13 +119,13 @@ INT WINAPI MyWSALookupServiceBegin(_In_ LPWSAQUERYSET pQuerySet, _In_ DWORD dwFl
 	int connectRes = 0;
 	FILE* pLogFile = NULL;
 	struct sockaddr_in server;
+	
 
 	// Since this function initiates the query and allocates memory, it is called as is
-	iResult = pWSALookupServiceBegin(pQuerySet, dwFlags, lphLookup);
+	
 
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 	fprintf(pLogFile, "[MyWSALookupServiceBegin]\t Entered\n");
-	fprintf(pLogFile, "[MyWSALookupServiceBegin]\t iResult = %d\n", iResult);
 	fclose(pLogFile);
 
 	// initiate a TCP connection 
@@ -144,15 +144,25 @@ INT WINAPI MyWSALookupServiceBegin(_In_ LPWSAQUERYSET pQuerySet, _In_ DWORD dwFl
 			fclose(pLogFile);
 
 		}
+		if (remoteHost == NULL) {
+			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+			fprintf(pLogFile, "[MyWSALookupServiceBegin]\t Didn't resolve DNS!\n");
+			fclose(pLogFile);
+			workWithCloudServer = false;
+			iResult = pWSALookupServiceBegin(pQuerySet, dwFlags, lphLookup);
+			return iResult;
 
-		//server.sin_addr.s_addr = inet_addr(BTProxyIpAddr);
-		server.sin_addr.s_addr = inet_addr(CloudServerAddr);
+		}
+		//server.sin_addr.s_addr = inet_addr(CloudServerAddr);
+		server.sin_addr.s_addr = *(u_long *)remoteHost->h_addr_list[0];
 		server.sin_family = AF_INET;
 		server.sin_port = htons(BTProxyPort);
 		connectRes = pConnect(TCPSocket, (struct sockaddr *)&server, sizeof(server));
 		if (connectRes < 0) {
 			// if connect to BTProxy failed, run as a regular BT program.
-			printf("[MyWSALookupServiceBegin]\t TCP Connect failed with error %d\n", pWSAGetLastError());
+			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+			fprintf(pLogFile, "[MyWSALookupServiceBegin]\t TCP Connect failed with error %d\n", pWSAGetLastError());
+			fclose(pLogFile);
 			workWithCloudServer = false;
 			pClosesocket(TCPSocket);
 			TCPSocketClosed = true;
@@ -162,6 +172,7 @@ INT WINAPI MyWSALookupServiceBegin(_In_ LPWSAQUERYSET pQuerySet, _In_ DWORD dwFl
 			fclose(pLogFile);
 
 			// return the pWSALookupServiceBegin result
+			iResult = pWSALookupServiceBegin(pQuerySet, dwFlags, lphLookup);
 			return iResult;
 		}
 		else {
@@ -187,6 +198,7 @@ INT WINAPI MyWSALookupServiceBegin(_In_ LPWSAQUERYSET pQuerySet, _In_ DWORD dwFl
 			}
 		}
 	}
+	iResult = pWSALookupServiceBegin(pQuerySet, dwFlags, lphLookup);
 	return iResult;
 }
 INT WINAPI MyWSALookupServiceNext(_In_ HANDLE hLookup, _In_ DWORD dwFlags, _Inout_ LPDWORD lpdwBufferLength, _Out_ LPWSAQUERYSET pResults)
@@ -310,6 +322,7 @@ INT WINAPI MyWSALookupServiceEnd(_In_ HANDLE hLookup)
 SOCKET WSAAPI MySocket(_In_ int af, _In_ int type, _In_ int protocol)
 {
 	//MsgBox("HookDll : Entered MySocket");
+	SOCKET BTSocket = INVALID_SOCKET;
 	FILE* pLogFile = NULL;
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 	fprintf(pLogFile, "[MySocket]\t Entered\n");
@@ -517,16 +530,44 @@ extern "C" __declspec(dllexport) void dummy(void){
 	return;
 }
 
-
+void resolveDNS() {
+	WSADATA data;
+	FILE* pLogFile = NULL;
+	struct in_addr foundAddr;
+	int iResult = WSAStartup(MAKEWORD(2, 2), &data);
+	if (iResult) {
+		printf("[resolveDNS]\t Error initializing sockets!\n\r");
+	}
+	else {
+		remoteHost = gethostbyname(CloudServerHostName);
+		if (remoteHost == NULL) {
+			int realError = pWSAGetLastError();
+			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+			fprintf(pLogFile, "[resolveDNS]\t gethostbyname failed with error %d\n", realError);
+			fclose(pLogFile);
+		}
+		else {
+			foundAddr.s_addr = *(u_long *)remoteHost->h_addr_list[0];
+			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+			fprintf(pLogFile, "[resolveDNS]\t Found this IP: %s\n", inet_ntoa(foundAddr));
+			fclose(pLogFile);
+		}
+		resolvedDNS = true;
+	}
+}
 // =============================================================================
 // DllMain
 // =============================================================================
 BOOL WINAPI DllMain(HINSTANCE hinst, DWORD dwReason, LPVOID reserved)
 {
 	FILE* pLogFile = NULL;
-	//fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-	//fprintf(pLogFile, "[DllMain]\t Entered with dwReason = %d\n", dwReason);
-	//fclose(pLogFile);
+	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
+	fprintf(pLogFile, "[DllMain]\t Entered with dwReason = %d\n", dwReason);
+	fclose(pLogFile);
+
+	if (!resolvedDNS) {
+		resolveDNS();
+	}
 
 	if (DetourIsHelperProcess()) {
 		return TRUE;

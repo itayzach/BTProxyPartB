@@ -240,7 +240,7 @@ int __cdecl main(int argc, char **argv)
 	// =========================================
 	// Initialize Winsock
 	// =========================================
-	iResult = WSAStartup(wVersionRequested, &wsaData);
+	iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
 	if (iResult != 0) {
 		printf("[BTClient] WSAStartup failed with error: %d\n", iResult);
 		return 1;
