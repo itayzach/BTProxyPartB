@@ -16,8 +16,6 @@
 
 // TODO
 // 1. Delete unwanted comments in the code
-// 2. Check if there are redundent flags (like TCPSocketClosed)
-// 3. Retreive IP address of CloudServer from URL
 
 // =============================================================================
 // Define hooking pointers
@@ -86,23 +84,11 @@ struct hostent *remoteHost = NULL;
 // =============================================================================
 int WINAPI MyWSAGetLastError() {
 	int realLastError;
-	//FILE* pLogFile = NULL;
-	//fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-	//fprintf(pLogFile, "[MyWSAGetLastError]\t Entered\n");
-	//fclose(pLogFile);
-	//
 	realLastError = pWSAGetLastError();
-	//
-	//fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 	if (realLastError == ERROR_ALREADY_EXISTS) {
-	//	fprintf(pLogFile, "[MyWSAGetLastError]\t Got ERROR_ALREADY_EXISTS\n");
-	//    fclose(pLogFile);
 		return lastError;
 	}
 	lastError = pWSAGetLastError();
-	//fprintf(pLogFile, "[MyWSAGetLastError]\t Got %d\n", lastError);
-	//fclose(pLogFile);
-	//return lastError;
 
 	if (setLastErrorToWSA_E_NO_MORE) {
 		// in case recv from BT Proxy for more devices was failed, 
@@ -312,8 +298,6 @@ INT WINAPI MyWSALookupServiceEnd(_In_ HANDLE hLookup)
 
 SOCKET WSAAPI MySocket(_In_ int af, _In_ int type, _In_ int protocol)
 {
-	//MsgBox("HookDll : Entered MySocket");
-	
 	FILE* pLogFile = NULL;
 	int iResult;
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
@@ -322,7 +306,6 @@ SOCKET WSAAPI MySocket(_In_ int af, _In_ int type, _In_ int protocol)
 	
 	iResult = pSocket(af, type, protocol);
 	if (iResult == INVALID_SOCKET) {
-		//MsgBox("BT socket failed with error\n");
 		fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 		fprintf(pLogFile, "[MySocket]\t BT socket failed with error\n");
 		fclose(pLogFile);
@@ -364,7 +347,6 @@ int WINAPI MyConnect(_In_ SOCKET s, _In_ const struct sockaddr *name, _In_ int n
 		fclose(pLogFile);
 	}
 
-	//MsgBox("HookDll : Entered MyConnect");
 	if (workWithCloudServer && BTdeviceIsRemote && RemoteBTdeviceSocket == s) {
 		// send a request for name from BT proxy
 		char *msgToBTproxy = "msgFromHKW_connect";
@@ -389,14 +371,11 @@ int WINAPI MyConnect(_In_ SOCKET s, _In_ const struct sockaddr *name, _In_ int n
 			fclose(pLogFile);
 		}
 		else {
-			//MsgBox("connect succeded");
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 			fprintf(pLogFile, "[MyConnect]\t BT Connect succeded to socket %d\n", s);
 			fclose(pLogFile);
 		}
 	}
-	
-
 	return iResult;
 }
 
@@ -406,8 +385,6 @@ int WINAPI MySend(SOCKET s, const char* buf, int len, int flags)
 	int iResult;
 	FILE* pLogFile = NULL;
 	char recvBuf[1024] = { 0 };
-	//MsgBox("HookDll : Entered MySend");
-	//char* msg = "Message from HookDLL  ";
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 	fprintf(pLogFile, "[MySend]\t Entered\n");
 	fclose(pLogFile);
@@ -445,7 +422,6 @@ int WINAPI MySend(SOCKET s, const char* buf, int len, int flags)
 			// if recv failed, MySend was failed sending the actual message
 			return -1;
 		} else if (iResult == SOCKET_ERROR) {
-			//MsgBox("send failed with error: \n");
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 			fprintf(pLogFile, "[MySend]\t TCP send failed with error %d\n", iResult);
 			fclose(pLogFile);
@@ -456,7 +432,6 @@ int WINAPI MySend(SOCKET s, const char* buf, int len, int flags)
 			return -1;
 		}
 		else {
-			//MsgBox("send succeded");
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 			fprintf(pLogFile, "[MySend]\t TCP send succeeded. Message = %s, iResult =  %d\n", buf, iResult);
 			fclose(pLogFile);
@@ -465,7 +440,6 @@ int WINAPI MySend(SOCKET s, const char* buf, int len, int flags)
 	else {
 		iResult = pSend(s, buf, len, flags);
 		if (iResult == SOCKET_ERROR) {
-			//MsgBox("send failed with error: \n");
 			fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 			fprintf(pLogFile, "[MySend]\t BT send failed with error %d\n", iResult);
 			fclose(pLogFile);
@@ -491,7 +465,6 @@ int WINAPI MyClosesocket(_In_ SOCKET s)
 {
 	int iResult;
 	FILE* pLogFile = NULL;
-	//MsgBox("HookDll : Entered MyClosesocket");
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
 	fprintf(pLogFile, "[MyClosesocket]\t Entered\n");
 	fclose(pLogFile);
@@ -513,7 +486,6 @@ int WINAPI MyClosesocket(_In_ SOCKET s)
 	int res1;
 	res1 = TCPSocketClosed ? 0 : pClosesocket(TCPSocket); // close socket only if it wasn't closed already
 	int res2;
-	//res2 = (BTdeviceIsRemote) ? 0 : pClosesocket(s);
 	res2 = pClosesocket(s);
 
 	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
@@ -600,9 +572,6 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD dwReason, LPVOID reserved)
 		DetourTransactionCommit();
 	}
 
-	//fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "a+");
-	//fprintf(pLogFile, "[DllMain]\t Done\n");
-	//fclose(pLogFile);
 	return TRUE;
 }
 

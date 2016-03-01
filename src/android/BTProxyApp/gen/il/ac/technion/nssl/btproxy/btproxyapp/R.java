@@ -26,7 +26,8 @@ public final class R {
         public static final int ic_launcher=0x7f020001;
     }
     public static final class id {
-        public static final int action_settings=0x7f080009;
+        public static final int action_settings=0x7f08000a;
+        public static final int btnClearLog=0x7f080009;
         public static final int btnRestart=0x7f080008;
         public static final int imageView1=0x7f080007;
         public static final int linearLayout1=0x7f080000;
@@ -47,6 +48,7 @@ public final class R {
         public static final int action_settings=0x7f050003;
         public static final int app_name=0x7f050000;
         public static final int btFoundDevice=0x7f050002;
+        public static final int clearLog=0x7f050008;
         public static final int clientMsg=0x7f050004;
         public static final int close=0x7f050006;
         public static final int cmdLog=0x7f050007;

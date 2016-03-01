@@ -36,18 +36,12 @@ import android.widget.Button;
 import android.widget.TextView;
 
 
-// TODO
-// 1. Add clear log button
-// 2. check the discovery issue
-// 3. Retrieve IP address from URL (app crashes on InetAddress.getByName(cloudServerURL.getHost());)
-// 4. Clear BLUE color from the Cloud Server IP when disconnected from CloudServer
-// 5. Delete unwanted comments in the code
-
 // =============================================================================
 // MainActivity class
 // =============================================================================
 public class MainActivity extends Activity {
 	private Button btnRestart;
+	private Button btnClearLog;
 	final Context context = this;
 	private TextView tvCmdLog;
 	private Handler updateActivityHandler;
@@ -60,8 +54,6 @@ public class MainActivity extends Activity {
 	private final int CLOUD_SERVER_PORT = 4020; //Define the server port
 
 	private final String CLOUD_SERVER_URL = "btpcs.eastus.cloudapp.azure.com";
-	//private final String CLOUD_SERVER_IP = "104.45.149.160";//"132.68.60.117";//
-	//private Thread TCPserverThread = null;
 	private Thread TCPclientThread = null;
 	
 	
@@ -103,13 +95,13 @@ public class MainActivity extends Activity {
 			android.util.Log.e("TrackingFlow", "[connectToBTdevice] Found: " + remoteDevice.getName());
 			UUID uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 			BTSocket = remoteDevice.createRfcommSocketToServiceRecord(uuid);
+			BTSocket.connect();
 			runOnUiThread(new Runnable() {	
 				@Override
 				public void run() {
-					tvFoundBT.append("\n" + remoteDevice.getName() + " [" + remoteDevice.getAddress() + "]");
+					tvFoundBT.setText("Connected to BT device:\n" + remoteDevice.getName() + " [" + remoteDevice.getAddress() + "]");
 				}
 			});
-			BTSocket.connect();
 			updateActivityHandler.post(new changeColorUIThread(Color.BLUE, tvFoundBT));
 		}
 		catch (IOException e) {e.printStackTrace();}
@@ -128,13 +120,25 @@ public class MainActivity extends Activity {
 		tvFoundBT = (TextView) findViewById(R.id.textViewFoundBT);
 		tvCmdLog = (TextView) findViewById(R.id.textViewCmdLog);
 		btnRestart = (Button) findViewById(R.id.btnRestart);
+		btnClearLog = (Button) findViewById(R.id.btnClearLog);
 		BTDevicesList = new ArrayList<BTDeviceEntry>();
 		updateActivityHandler = new Handler();
 		
 		final String initBTfoundText = (String) tvFoundBT.getText();
 		final String initServerIPText = (String) tvServerIP.getText(); 
 
+		// ClearLog button listener
+		btnClearLog.setOnClickListener(new View.OnClickListener() {
+			
+			@Override
+			public void onClick(View v) {
+				android.util.Log.e("TrackingFlow", "[btnClearLog] Clearing log");
+				tvCmdLog.setText("");
+			}
+		});
 		
+		
+		// Restart button listener
 		btnRestart.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) { 
@@ -158,45 +162,21 @@ public class MainActivity extends Activity {
 				} catch(Exception e) {
 					android.util.Log.e("TrackingFlow", "[btnRestart] onClick exception when closing sockets: " + e.getMessage());
 				}
-				//TCPserverThread = new Thread(new TCPServerThread());
-				//TCPserverThread.start();
 				TCPclientThread = new Thread(new TCPClientThread());
 				TCPclientThread.start();
 				
-				// BT discovery
-//				unregisterReceiver(discoveryResult);
-//				registerReceiver(discoveryResult, new IntentFilter(BluetoothDevice.ACTION_FOUND));
-//				
-//				adapter = BluetoothAdapter.getDefaultAdapter();
 				if(adapter != null && adapter.isDiscovering()) {
 					adapter.cancelDiscovery();
 				}
 				BTDevicesList.clear();
-				//adapter.startDiscovery();
 
 			}
 		});
 
-		// Find IP
-		//getDeviceIpAddress();
-		
-		
-		// Wait for TCP connection from client
-		// TCPserverThread = new Thread(new TCPServerThread());
-		// android.util.Log.e("TrackingFlow", "Before start");
-		// TCPserverThread.start();
-		
-		//getCloudIpAddress();
+		// Start TCP client
 		TCPclientThread = new Thread(new TCPClientThread());
 		TCPclientThread.start();
 		
-		// Start BT discovery
-		
-//		if(adapter != null && adapter.isDiscovering()) {
-//			adapter.cancelDiscovery();
-//		}
-//		adapter.startDiscovery();
-
 		
 	}
 	// -------------------------------------------------------------------------
@@ -205,11 +185,6 @@ public class MainActivity extends Activity {
 	@Override
 	protected void onDestroy() {
 		super.onDestroy();
-		/*try {
-			unregisterReceiver(discoveryResult);
-		} catch(Exception e) {
-			android.util.Log.e("TrackingFlow", "onDestroy exception in unregisterReciever : " + e.getMessage());
-		}*/
 		try{
 			if(BTSocket != null){
 				BTOutputStream.close();
@@ -377,8 +352,6 @@ public class MainActivity extends Activity {
 								updateActivityHandler.post(new updateUIThread("BTP->HKW : WSA_E_NO_MORE"));
 								continue;
 							}
-							//while(!startedDiscovery);
-							//android.util.Log.e("TrackingFlow", "[TCPClientThread] finished discovery");
 						} else if (BTdevicesListIndex == BTDevicesList.size()) {
 							// meaning there are no more devices found
 							android.util.Log.e("TrackingFlow", "[TCPClientThread] sending back msgFromBTP_WSA_E_NO_MORE");
@@ -459,7 +432,6 @@ public class MainActivity extends Activity {
 				} catch (IOException e) {
 					e.printStackTrace();
 				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 			}
