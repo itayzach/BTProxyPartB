@@ -34,9 +34,10 @@ int main(int argc, char *argv[])
 	STARTUPINFO si;
 	PROCESS_INFORMATION pi;
 	//char* ExePath = "C:\\Users\\Itay\\Documents\\GitHub\\BTProxyPartB\\src\\c\\BTClient\\BTClient.exe";
-	char* ExePath = "C:\\Users\\Itay\\Documents\\GitHub\\BTProxyPartB\\src\\c\\BTClientProj\\Debug\\BTClientProj.exe";
+	char* ExePath = "C:\\Users\\itayz\\Documents\\GitHub\\BTProxyPartB\\src\\c\\BTClientProj\\Debug\\BTClientProj.exe";
 	//char* ExePath = "C:\\Program Files (x86)\\Phonak\\Phonak Target\\Target.exe";
-	char* DllPath = "C:\\Users\\Itay\\Documents\\GitHub\\BTProxyPartB\\src\\c\\Hook\\HookDll\\Debug\\HookDll.dll";
+	char* DllPath = "C:\\Users\\itayz\\Documents\\GitHub\\BTProxyPartB\\src\\c\\Hook\\HookDll\\Debug\\HookDll.dll";
+	char* logFilePath = "C:\\Users\\itayz\\Documents\\Log.txt";
 	
 	FILE*  pLogFile;
 	time_t rawtime;
@@ -44,7 +45,7 @@ int main(int argc, char *argv[])
 	time(&rawtime);
 	timeinfo = localtime(&rawtime);
 
-	fopen_s(&pLogFile, "C:\\Users\\Itay\\Documents\\Log.txt", "w+");
+	fopen_s(&pLogFile, logFilePath, "w+");
 	fprintf(pLogFile, "*******************************************\n");
 	fprintf(pLogFile, "Ran at: %s", asctime(timeinfo));
 	fprintf(pLogFile, "*******************************************\n");	
